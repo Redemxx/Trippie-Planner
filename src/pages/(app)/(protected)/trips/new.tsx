@@ -159,7 +159,7 @@ export default function NewTripPage() {
   }
 
   return (
-    <div className="min-h-full px-5 py-6 text-foreground md:px-8 md:py-10">
+    <div className="min-h-full px-4 py-5 text-foreground sm:px-6 md:px-8 md:py-10">
       <div className="mx-auto max-w-5xl space-y-6">
         <div>
           <p className="font-mono text-xs uppercase tracking-widest text-primary">New Atlas</p>
@@ -422,11 +422,16 @@ export default function NewTripPage() {
           </div>
         </section>
 
-        <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={() => navigate('/home')}>
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <Button variant="outline" className="w-full sm:w-auto" onClick={() => navigate('/home')}>
             Cancel
           </Button>
-          <Button loading={submitting} onClick={handleSubmit} data-testid="create-trip-submit">
+          <Button
+            loading={submitting}
+            className="w-full sm:w-auto"
+            onClick={handleSubmit}
+            data-testid="create-trip-submit"
+          >
             Create Trip
             <ArrowRight className="size-4" aria-hidden />
           </Button>

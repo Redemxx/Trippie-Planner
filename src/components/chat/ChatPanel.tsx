@@ -361,7 +361,7 @@ export function ChatPanel({
         </div>
       )}
 
-      <div className={`shrink-0 border-t border-border/60 ${horizontalPadding} pb-4 pt-3`}>
+      <div className={`shrink-0 border-t border-border/60 ${horizontalPadding} pb-[max(1rem,env(safe-area-inset-bottom))] pt-3`}>
         {needsGoogleLink && (
           <div className="mx-auto mb-2 flex w-full max-w-[44rem] items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs">
             <span className="text-muted-foreground">

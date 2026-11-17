@@ -256,8 +256,8 @@ export function ItineraryTimeline({
   return (
     <div className="flex flex-col gap-4">
       {/* Day Selector Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="no-scrollbar flex max-w-full flex-nowrap items-center gap-1.5 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
           {dayTabs.map((d) => {
             const count = stops.filter((s) => s.dayNumber === d).length
             const active = d === dayNumber

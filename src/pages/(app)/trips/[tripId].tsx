@@ -369,11 +369,11 @@ export default function TripWorkspacePage() {
   }
 
   return (
-    <div className="min-h-full px-5 py-6 text-foreground md:px-8" data-testid="trip-workspace">
+    <div className="min-h-full px-4 py-4 text-foreground sm:px-6 md:px-8 md:py-6" data-testid="trip-workspace">
       <div className="mx-auto max-w-7xl space-y-5">
         {/* Trip Header */}
-        <header className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-5">
-          <div>
+        <header className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-4 shadow-[var(--shadow-card)] sm:p-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant={trip.mode === 'overview' ? 'secondary' : 'default'}>
                 {trip.mode === 'overview' ? 'Overview Mode' : 'Detailed Itinerary'}
@@ -500,14 +500,14 @@ export default function TripWorkspacePage() {
 
         {/* Destinations & Live Weather Strip */}
         {destinations.length > 0 && (
-          <div className="flex flex-wrap gap-2.5">
+          <div className="no-scrollbar flex gap-2.5 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
             {destinations.map((dest) => (
               <div
                 key={dest.id}
-                className="flex items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-2 text-xs"
+                className="flex shrink-0 items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-xs shadow-[var(--shadow-card)] sm:shrink"
               >
-                <MapPin className="size-3.5 text-primary" aria-hidden />
-                <div>
+                <MapPin className="size-3.5 shrink-0 text-primary" aria-hidden />
+                <div className="min-w-0">
                   <span className="font-semibold text-foreground">
                     {dest.name}
                     {dest.country ? `, ${dest.country}` : ''}
@@ -530,7 +530,7 @@ export default function TripWorkspacePage() {
                   aria-label={`Refresh weather for ${dest.name}`}
                   disabled={weatherLoadingId === dest.id}
                   onClick={() => void handleRefreshWeather(dest.id)}
-                  className="ml-1 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+                  className="ml-1 rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
                 >
                   <RefreshCw
                     className={`size-3 ${weatherLoadingId === dest.id ? 'animate-spin' : ''}`}
@@ -586,13 +586,13 @@ export default function TripWorkspacePage() {
               </div>
 
               <div className="lg:col-span-5">
-                <div className="sticky top-6">
+                <div className="lg:sticky lg:top-6">
                   <AtlasMap
                     stops={dayStops}
                     destinations={destinations}
                     selectedStopId={selectedStopId}
                     onSelectStop={setSelectedStopId}
-                    className="h-[460px]"
+                    className="h-[280px] sm:h-[360px] lg:h-[460px]"
                   />
                 </div>
               </div>

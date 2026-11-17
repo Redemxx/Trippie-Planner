@@ -64,4 +64,25 @@ test.describe('Smoke tests', () => {
     await waitForApp(page)
     await expect(page.locator('text=404')).toBeVisible()
   })
+
+  test('phone viewport (390x844) renders landing and /home without horizontal overflow', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+
+    await page.goto('/')
+    await waitForApp(page)
+    await expect(page.getByTestId('static-landing')).toBeVisible()
+    const landingOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth + 1,
+    )
+    expect(landingOverflow).toBe(false)
+
+    await page.goto('/home')
+    await expect(page.getByTestId('sample-atlas-preview')).toBeVisible({ timeout: 15000 })
+    const homeOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth + 1,
+    )
+    expect(homeOverflow).toBe(false)
+  })
 })

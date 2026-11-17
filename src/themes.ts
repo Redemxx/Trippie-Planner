@@ -5,13 +5,13 @@
 export const THEMES = [
   {
     id: 'atlas',
-    label: 'Dark Atlas',
-    description: 'Obsidian-navy cartographic deck with warm compass-amber accents.',
+    label: 'Coastal Lagoon',
+    description: 'Deep tropical ocean-teal canvas with luminous seafoam accents.',
   },
   {
     id: 'cartographer',
-    label: 'Cartographer Light',
-    description: 'Warm parchment paper with crisp charcoal ink for daylight reading.',
+    label: 'Coastal Daylight',
+    description: 'Crisp white destination cards on airy seafoam mist for bright daylight.',
   },
 ] as const
 
