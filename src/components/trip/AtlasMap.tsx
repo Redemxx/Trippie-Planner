@@ -131,7 +131,7 @@ export function AtlasMap({
           L.polyline(
             geoStops.map((s) => [s.lat, s.lng]),
             {
-              color: lightTheme ? '#096c6e' : '#2dd4bf',
+              color: '#e5a93c',
               weight: 2.5,
               opacity: 0.9,
               dashArray: '6 6',
@@ -141,7 +141,7 @@ export function AtlasMap({
           L.polyline(
             geoDests.map((d) => [d.lat, d.lng]),
             {
-              color: lightTheme ? '#0d9488' : '#5eead4',
+              color: '#38bdf8',
               weight: 2,
               opacity: 0.85,
               dashArray: '4 6',
@@ -156,7 +156,7 @@ export function AtlasMap({
             const marker = L.marker([stop.lat, stop.lng], {
               icon: L.divIcon({
                 className: 'trippie-pin',
-                html: `<div style="width:${isSelected ? 30 : 24}px;height:${isSelected ? 30 : 24}px;border-radius:9999px;background:${meta.color};color:#032b2d;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;border:2px solid #032b2d;box-shadow:0 2px 8px rgba(0,0,0,0.45);transform:translate(-50%,-50%)">${index + 1}</div>`,
+                html: `<div style="width:${isSelected ? 30 : 24}px;height:${isSelected ? 30 : 24}px;border-radius:9999px;background:${meta.color};color:#090d14;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;border:2px solid #090d14;box-shadow:0 2px 8px rgba(0,0,0,0.45);transform:translate(-50%,-50%)">${index + 1}</div>`,
                 iconSize: [0, 0],
               }),
             })
@@ -169,7 +169,7 @@ export function AtlasMap({
             const marker = L.marker([dest.lat, dest.lng], {
               icon: L.divIcon({
                 className: 'trippie-pin',
-                html: `<div style="width:26px;height:26px;border-radius:9999px;background:#2dd4bf;color:#032b2d;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;border:2px solid #032b2d;box-shadow:0 2px 8px rgba(0,0,0,0.45);transform:translate(-50%,-50%)">${index + 1}</div>`,
+                html: `<div style="width:26px;height:26px;border-radius:9999px;background:#e5a93c;color:#090d14;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;border:2px solid #090d14;box-shadow:0 2px 8px rgba(0,0,0,0.45);transform:translate(-50%,-50%)">${index + 1}</div>`,
                 iconSize: [0, 0],
               }),
             })

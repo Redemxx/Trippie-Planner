@@ -37,12 +37,6 @@ import {
   type TripData,
 } from '@/lib/trip-types'
 
-const TRIP_COVERS = [
-  '/images/card-coast.jpg',
-  '/images/card-lagoon.jpg',
-  '/images/card-forest.jpg',
-] as const
-
 export default function HomePage() {
   const { isLoaded, isSignedIn, userId } = useAuth()
   const navigate = useNavigate()
@@ -95,87 +89,51 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-full px-4 py-5 text-foreground sm:px-6 md:px-8 md:py-8">
-      <div className="mx-auto max-w-6xl space-y-6 md:space-y-8">
-        {/* Tropical Lagoon Header Banner */}
-        <div className="relative overflow-hidden rounded-2xl border border-border bg-[#044649] p-5 text-white shadow-[var(--shadow-card)] sm:p-6">
-          <img
-            src="/images/hero-lagoon.jpg"
-            alt=""
-            aria-hidden
-            className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-50"
-          />
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0"
-            style={{
-              background:
-                'linear-gradient(105deg, rgba(3, 52, 55, 0.94) 0%, rgba(5, 75, 79, 0.82) 55%, rgba(4, 54, 57, 0.60) 100%)',
-            }}
-          />
-          <div className="relative flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div className="min-w-0">
-              <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-[#5eead4]">
-                Trippie Coastal Atlas
-              </p>
-              <h1 className="mt-1 text-2xl font-bold tracking-tight text-white md:text-3xl">
-                {isSignedIn ? 'Your Vacation Atlas' : 'Kyoto & Hakone Route Atlas'}
-              </h1>
-              <p className="mt-1.5 max-w-xl text-xs leading-relaxed text-white/85 sm:text-sm">
-                {isSignedIn
-                  ? 'Build multi-stop itineraries, test pacing in Overview Mode, optimize transit legs, and steer plans with your AI Concierge.'
-                  : 'Preview a live travel-time optimized itinerary with golden-hour photo spots and overview pacing. Sign in to create and co-edit your own trips.'}
-              </p>
-            </div>
+    <div className="min-h-full px-5 py-6 text-foreground md:px-8 md:py-8">
+      <div className="mx-auto max-w-6xl space-y-8">
+        {/* Header */}
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-6">
+          <div>
+            <p className="font-mono text-xs uppercase tracking-widest text-primary">
+              Trippie Atlas
+            </p>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground md:text-3xl">
+              {isSignedIn ? 'Your Vacation Atlas' : 'Kyoto & Hakone Route Atlas'}
+            </h1>
+            <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+              {isSignedIn
+                ? 'Build multi-stop itineraries, test pacing in Overview Mode, optimize transit legs, and steer plans with your AI Concierge.'
+                : 'Preview a live travel-time optimized itinerary with golden-hour photo spots and overview pacing. Sign in to create and co-edit your own trips.'}
+            </p>
+          </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              {isSignedIn ? (
-                <>
-                  <Button
-                    variant="outline"
-                    className="border-white/30 bg-white/10 text-white hover:bg-white/20"
-                    loading={cloning}
-                    onClick={handleCloneSample}
-                  >
-                    <Copy className="size-3.5" aria-hidden />
-                    Clone Kyoto Sample
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    className="bg-white/15 text-white hover:bg-white/25"
-                    onClick={() => navigate('/overview')}
-                  >
-                    <MapIcon className="size-3.5" aria-hidden />
-                    Overview Mode
-                  </Button>
-                  <Button
-                    className="bg-[#2dd4bf] text-[#032b2d] hover:bg-[#5eead4]"
-                    onClick={() => navigate('/trips/new')}
-                    data-testid="new-trip-cta"
-                  >
-                    <Plus className="size-3.5" aria-hidden />
-                    New Trip
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button
-                    variant="outline"
-                    className="border-white/30 bg-white/10 text-white hover:bg-white/20"
-                    onClick={() => setShowAuth(true)}
-                  >
-                    Sign in to Create Trips
-                  </Button>
-                  <Button
-                    className="bg-[#2dd4bf] text-[#032b2d] hover:bg-[#5eead4]"
-                    onClick={() => setShowAuth(true)}
-                  >
-                    Get Started
-                    <ArrowRight className="size-3.5" aria-hidden />
-                  </Button>
-                </>
-              )}
-            </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {isSignedIn ? (
+              <>
+                <Button variant="outline" loading={cloning} onClick={handleCloneSample}>
+                  <Copy className="size-3.5" aria-hidden />
+                  Clone Kyoto Sample
+                </Button>
+                <Button variant="secondary" onClick={() => navigate('/overview')}>
+                  <MapIcon className="size-3.5" aria-hidden />
+                  Overview Mode
+                </Button>
+                <Button onClick={() => navigate('/trips/new')} data-testid="new-trip-cta">
+                  <Plus className="size-3.5" aria-hidden />
+                  New Trip
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" onClick={() => setShowAuth(true)}>
+                  Sign in to Create Trips
+                </Button>
+                <Button onClick={() => setShowAuth(true)}>
+                  Get Started
+                  <ArrowRight className="size-3.5" aria-hidden />
+                </Button>
+              </>
+            )}
           </div>
         </div>
 
@@ -203,8 +161,8 @@ export default function HomePage() {
                 secondaryAction={{ label: 'Clone Kyoto Sample', onClick: handleCloneSample }}
               />
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {tripRecords.map((rec, index) => {
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {tripRecords.map((rec) => {
                   const t = rec.data
                   const tripDests = destRecords
                     .filter((d) => d.data.tripId === rec.recordId)
@@ -213,51 +171,37 @@ export default function HomePage() {
                   const collabCount =
                     (Array.isArray(t.editors) ? t.editors.length : 1) +
                     (Array.isArray(t.viewers) ? t.viewers.length : 0)
-                  const coverImage = TRIP_COVERS[index % TRIP_COVERS.length]
 
                   return (
                     <Link
                       key={rec.recordId}
                       to={`/trips/${rec.recordId}`}
                       data-testid={`trip-card-${rec.recordId}`}
-                      className="group flex flex-col justify-between overflow-hidden rounded-xl border border-border bg-card shadow-[var(--shadow-card)] transition-all hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-[var(--shadow-card-hover)]"
+                      className="group flex flex-col justify-between rounded-xl border border-border bg-card p-5 transition-colors hover:border-primary/60"
                     >
                       <div>
-                        <div className="relative h-24 w-full overflow-hidden bg-[#044649]">
-                          <img
-                            src={coverImage}
-                            alt=""
-                            aria-hidden
-                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-black/20" />
-                          <div className="absolute inset-x-3 top-2.5 flex items-center justify-between gap-2">
-                            <Badge variant={t.mode === 'overview' ? 'secondary' : 'default'}>
-                              {t.mode === 'overview' ? 'Overview Mode' : 'Detailed'}
-                            </Badge>
-                            <Badge variant="outline" className="border-white/40 bg-black/35 text-white backdrop-blur-xs">
-                              {role}
-                            </Badge>
-                          </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <Badge variant={t.mode === 'overview' ? 'secondary' : 'default'}>
+                            {t.mode === 'overview' ? 'Overview Mode' : 'Detailed'}
+                          </Badge>
+                          <Badge variant="outline">{role}</Badge>
                         </div>
 
-                        <div className="p-4 pb-2">
-                          <h3 className="text-base font-semibold text-foreground group-hover:text-primary">
-                            {t.title}
-                          </h3>
+                        <h3 className="mt-3 text-base font-semibold text-foreground group-hover:text-primary">
+                          {t.title}
+                        </h3>
 
-                          <p className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <MapPin className="size-3.5 shrink-0 text-primary" aria-hidden />
-                            <span className="truncate">
-                              {tripDests.length > 0
-                                ? tripDests.map((d) => d.data.name).join(' → ')
-                                : t.coverDestination || 'No destinations yet'}
-                            </span>
-                          </p>
-                        </div>
+                        <p className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <MapPin className="size-3.5 shrink-0 text-primary" aria-hidden />
+                          <span className="truncate">
+                            {tripDests.length > 0
+                              ? tripDests.map((d) => d.data.name).join(' → ')
+                              : t.coverDestination || 'No destinations yet'}
+                          </span>
+                        </p>
                       </div>
 
-                      <div className="mx-4 mb-4 mt-2 flex items-center justify-between border-t border-border pt-3 text-xs text-muted-foreground">
+                      <div className="mt-4 flex items-center justify-between border-t border-border pt-3 text-xs text-muted-foreground">
                         <span className="inline-flex items-center gap-1">
                           <Calendar className="size-3.5" aria-hidden />
                           {t.startDate && t.endDate
@@ -386,7 +330,7 @@ export default function HomePage() {
                       destinations={SAMPLE_TRIP.destinations}
                       selectedStopId={selectedSampleStop}
                       onSelectStop={setSelectedSampleStop}
-                      className="h-[280px] sm:h-[360px] lg:h-[420px]"
+                      className="h-[420px]"
                     />
                   </div>
                 </div>

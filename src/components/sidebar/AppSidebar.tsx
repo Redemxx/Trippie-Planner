@@ -322,7 +322,7 @@ export function AppSidebar({ mobileOpen, onMobileClose }: AppSidebarProps) {
 /** Minimal mobile top bar (<md) — hamburger + app name. */
 export function SidebarMobileHeader({ onOpenMenu }: { onOpenMenu: () => void }) {
   return (
-    <div className="flex h-12 flex-none items-center gap-3 border-b border-border bg-shell px-3 pr-16 md:hidden">
+    <div className="flex h-12 flex-none items-center gap-3 border-b border-border bg-shell px-3 md:hidden">
       <button
         type="button"
         onClick={onOpenMenu}
@@ -331,12 +331,7 @@ export function SidebarMobileHeader({ onOpenMenu }: { onOpenMenu: () => void }) 
       >
         <Menu size={18} aria-hidden />
       </button>
-      <Link to="/home" className="flex items-center gap-2">
-        <span className="flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
-          <Compass className="size-3.5" aria-hidden />
-        </span>
-        <span className="text-sm font-semibold text-foreground">{APP_NAME}</span>
-      </Link>
+      <span className="text-sm font-semibold text-foreground">{APP_NAME}</span>
     </div>
   )
 }

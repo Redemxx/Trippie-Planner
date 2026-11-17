@@ -38,13 +38,13 @@ export default function AppLayout() {
       <title>{APP_NAME}</title>
       <AuthBoot>
         <TripChatProvider>
-          <div className="flex h-[100dvh] overflow-hidden bg-shell">
+          <div className="flex h-screen overflow-hidden bg-shell">
             <AppSidebar mobileOpen={mobileNavOpen} onMobileClose={closeMobileNav} />
             <div className="flex min-w-0 flex-1 flex-col">
               <SidebarMobileHeader onOpenMenu={() => setMobileNavOpen(true)} />
               <div className="flex min-h-0 flex-1">
                 {/* The main panel — the raised rectangle every (app) page renders into. */}
-                <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden bg-shell-panel pb-[env(safe-area-inset-bottom)] md:my-2 md:mr-2 md:rounded-xl md:border md:border-border md:shadow-[var(--shadow-card)]">
+                <main className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-shell-panel md:my-2 md:mr-2 md:rounded-xl md:border md:border-border md:shadow-[var(--shadow-card)]">
                   <Suspense
                     fallback={
                       <div className="flex h-full items-center justify-center text-muted-foreground">

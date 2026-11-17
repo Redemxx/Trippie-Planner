@@ -217,7 +217,7 @@ export function ChatDock() {
           )}
           <div
             style={{ opacity: open ? 1 : 0 }}
-            className="absolute inset-y-1.5 right-1.5 flex w-[min(420px,calc(100vw-12px))] flex-col overflow-hidden rounded-xl border border-border bg-shell-panel pb-[env(safe-area-inset-bottom)] shadow-lg transition-opacity duration-200"
+            className="absolute inset-y-2 right-2 flex w-[min(400px,calc(100vw-16px))] flex-col overflow-hidden rounded-xl border border-border bg-shell-panel shadow-lg transition-opacity duration-200"
           >
             {chat}
           </div>
@@ -234,7 +234,7 @@ export function ChatDock() {
         aria-expanded={open}
         title={open ? 'Close assistant' : 'Open assistant'}
         className={cn(
-          'fixed right-3 top-2 z-40 flex h-8 items-center justify-center gap-1 rounded-full border border-border bg-card px-2.5 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-muted md:right-4 md:top-4 md:size-7 md:rounded-md md:border-transparent md:bg-transparent md:px-0 md:text-muted-foreground md:shadow-none',
+          'fixed right-3 top-2.5 z-40 flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:right-4 md:top-4',
           // Above the open sheet (z-75) so it can close it; when closed it
           // must stay BELOW the kit's dialogs and the nav drawer (z-50).
           open && 'max-md:z-[76]',
@@ -243,10 +243,7 @@ export function ChatDock() {
         {open ? (
           <PanelRightClose className="h-3.5 w-3.5" aria-hidden />
         ) : (
-          <>
-            <PanelRightOpen className="h-3.5 w-3.5 text-primary md:text-current" aria-hidden />
-            <span className="md:hidden">AI</span>
-          </>
+          <PanelRightOpen className="h-3.5 w-3.5" aria-hidden />
         )}
       </button>
 

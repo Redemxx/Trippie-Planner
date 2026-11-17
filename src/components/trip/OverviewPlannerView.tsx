@@ -124,20 +124,20 @@ export function OverviewPlannerView({
                 value={daysInput}
                 disabled={!canEdit}
                 onChange={(e) => setDaysInput(e.target.value)}
-                className="w-full sm:w-28"
+                className="w-28"
               />
             </div>
 
             {canEdit && (
               <>
-                <div className="min-w-0 flex-1 sm:flex-none">
+                <div>
                   <Label htmlFor="overview-place">Add destination</Label>
                   <Input
                     id="overview-place"
                     value={newPlace}
                     onChange={(e) => setNewPlace(e.target.value)}
                     placeholder="e.g. Lisbon"
-                    className="w-full sm:w-44"
+                    className="w-44"
                   />
                 </div>
                 <div>

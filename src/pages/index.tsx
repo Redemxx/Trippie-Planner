@@ -1,317 +1,220 @@
 /**
- * Design Direction — Coastal Lagoon Theme
+ * Design Direction
  *
- * Product: Trippie is a vacation planner that sequences sights, restaurants, day trips,
- * and photography windows around real transit times, powered by conversational AI and live sync.
- * Palette: Deep tropical lagoon teal canvas (#033D40 → #096C6E) contrasted with crisp pure-white
- * floating destination cards, solid + hollow-outlined display typography, and emerald-aqua accents.
- * Static Contract: Zero /api/auth/ requests and zero WebSockets on `/`.
+ * Product: Trippie is a dark-atlas vacation planner that sequences sights, restaurants, day trips, and photography windows around real transit times.
+ * Emotion: Quiet nocturnal clarity — like spreading a brass-inked night chart across a cabin desk before dawn.
+ * Metaphor: A cartographic flight deck plotting golden-hour pins, transit arcs, and day-by-day pacing on obsidian slate.
+ * References: Marine navigation chartplotters, Leica viewfinder telemetry, Swiss railway timetable boards.
+ * Signature: A hairline coordinate grid paired with an interactive nocturnal route card showing live transit leg minutes and golden-hour light tags.
+ * Hero: An interactive React atlas card plots three Kyoto stops linked by walk and rail arcs while a subtle route pulse traces the leg.
+ *
+ * Style Tile
+ * - Color: Obsidian-navy dominant with warm compass-amber accent, restrained saturation.
+ * - Type: Crisp system grotesk headings paired with tabular monospace telemetry for times and distances.
+ * - Theme: Dark (atlas) — keeps map pins and golden-hour callouts luminous without glare.
+ * - Art direction: Precision cartographic telemetry — hairline borders, numbered nodes, zero stock photography.
+ * - Motion: Measured mechanical glide respecting prefers-reduced-motion.
+ * - Voice: Concise, geographic, practical; states transit minutes and light windows instead of travel clichés.
  */
 
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import {
-  ArrowRight,
-  Compass,
-  MapPin,
-  Play,
-  Route,
-  Search,
-  Sparkles,
-  User,
-  Users,
-} from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { ArrowRight, Camera, Clock, Compass, Route, Users } from 'lucide-react'
 import { Seo } from '../components/Seo'
 import { APP_NAME } from '../constants'
 import { seo } from '../seo'
 
-const HERO_CARDS = [
+const SAMPLE_LEGS = [
   {
-    image: '/images/card-coast.jpg',
-    title: 'Kyoto & Coastal Dawn Route',
-    subtitle: 'Day 01 · −38 min transit · Golden-hour photo pins & walk-optimized temple loop.',
-    cta: 'Open Atlas',
-    to: '/home',
+    idx: '01',
+    time: '06:30',
+    title: 'Kiyomizu-dera Terrace',
+    tag: 'Sunrise · 60 min',
+    leg: '12 min walk · 0.9 km',
   },
   {
-    image: '/images/card-lagoon.jpg',
-    title: 'Iberia Broad Overview',
-    subtitle: '10 Days · Suggested stay allocations across Lisbon, Porto & Seville before locking dates.',
-    cta: 'Overview Mode',
-    to: '/overview',
+    idx: '02',
+    time: '07:45',
+    title: 'Yasaka Pagoda Lane',
+    tag: 'Must-See · 60 min',
+    leg: '24 min transit · 5.4 km',
   },
   {
-    image: '/images/card-forest.jpg',
-    title: 'Collaborative Live Rooms',
-    subtitle: 'Invite companions as Read-Only Viewers or Co-Editors with instant cloud sync.',
-    cta: 'Start a Trip',
-    to: '/trips/new',
+    idx: '03',
+    time: '17:15',
+    title: 'Fushimi Inari Ridge',
+    tag: 'Golden Hour · 90 min',
+    leg: null,
   },
 ] as const
 
 export default function Landing() {
-  const navigate = useNavigate()
-  const [searchQuery, setSearchQuery] = useState('')
-
-  function handleQuickSearch(e: React.FormEvent) {
-    e.preventDefault()
-    const trimmed = searchQuery.trim()
-    navigate(trimmed ? `/overview?q=${encodeURIComponent(trimmed)}` : '/overview')
-  }
-
   return (
     <>
       <Seo {...seo} path="/" />
       <div
         data-testid="static-landing"
-        className="relative min-h-[100dvh] overflow-x-hidden bg-[#044649] text-white"
+        className="relative min-h-screen overflow-hidden bg-background text-foreground"
       >
-        {/* Full-bleed Tropical Lagoon Hero Banner */}
-        <section className="relative overflow-hidden border-b border-white/15">
-          <img
-            src="/images/hero-lagoon.jpg"
-            alt=""
-            aria-hidden
-            className="pointer-events-none absolute inset-0 h-full w-full object-cover object-center"
-          />
-          {/* Moody Deep Ocean-Teal Scrim */}
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0"
-            style={{
-              background:
-                'linear-gradient(108deg, rgba(3, 52, 55, 0.94) 0%, rgba(5, 72, 76, 0.80) 48%, rgba(4, 54, 57, 0.48) 100%)',
-            }}
-          />
+        {/* Subtle cartographic coordinate grid */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-20"
+          style={{
+            backgroundImage:
+              'linear-gradient(to right, var(--color-border) 1px, transparent 1px), linear-gradient(to bottom, var(--color-border) 1px, transparent 1px)',
+            backgroundSize: '64px 64px',
+          }}
+        />
 
-          {/* Decorative 4x4 Dot Grid (desktop) */}
-          <div
-            aria-hidden
-            className="pointer-events-none absolute left-[38%] top-28 hidden grid-cols-4 gap-2 opacity-55 lg:grid"
-          >
-            {Array.from({ length: 16 }).map((_, i) => (
-              <span key={i} className="size-1.5 rounded-full bg-white" />
-            ))}
+        <header className="relative mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
+          <div className="flex items-center gap-2.5">
+            <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <Compass className="size-4" aria-hidden />
+            </span>
+            <span className="text-base font-semibold tracking-tight">{APP_NAME}</span>
           </div>
+          <nav className="flex items-center gap-3">
+            <Link
+              to="/home"
+              className="rounded-md border border-border bg-card px-4 py-2 text-xs font-medium text-foreground transition-colors hover:bg-accent"
+            >
+              Preview Atlas
+            </Link>
+            <Link
+              to="/trips/new"
+              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+            >
+              Start a Trip
+              <ArrowRight className="size-3.5" aria-hidden />
+            </Link>
+          </nav>
+        </header>
 
-          {/* Top Navigation Bar */}
-          <header className="relative mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-4 sm:px-6 sm:py-5 lg:px-10">
-            <div className="flex items-center gap-6">
-              <Link to="/" className="flex items-center gap-2.5">
-                <span className="flex size-9 items-center justify-center rounded-full bg-white text-[#044649] shadow-sm">
-                  <Compass className="size-5" aria-hidden />
-                </span>
-                <span className="text-base font-bold tracking-tight text-white">{APP_NAME}</span>
-              </Link>
+        <main className="relative mx-auto max-w-6xl px-6 pb-20 pt-10 md:pt-16">
+          {/* Hero Split */}
+          <section className="grid items-center gap-12 lg:grid-cols-12">
+            <div className="lg:col-span-6">
+              <p className="font-mono text-xs uppercase tracking-widest text-primary">
+                35.0116° N · 135.7681° E
+              </p>
+              <h1 className="mt-4 text-4xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
+                Chart every hour, not just flights.
+              </h1>
+              <p className="mt-5 max-w-lg text-base text-muted-foreground">
+                Sequence sights, restaurants, day trips, and golden-hour photo spots around real
+                transit times—steered by conversational AI and shared live.
+              </p>
 
-              <nav className="hidden items-center gap-6 text-xs font-medium text-white/90 md:flex">
-                <Link to="/home" className="transition-colors hover:text-[#5eead4]">
-                  Sample Atlas
-                </Link>
-                <Link to="/overview" className="transition-colors hover:text-[#5eead4]">
-                  Overview Mode
-                </Link>
-                <Link to="/trips/new" className="transition-colors hover:text-[#5eead4]">
-                  Plan a Trip
-                </Link>
-              </nav>
-            </div>
-
-            <div className="flex items-center gap-2.5 sm:gap-3">
-              {/* Crisp White Pill Search (Desktop) */}
-              <form
-                onSubmit={handleQuickSearch}
-                className="hidden items-center rounded-full bg-white/95 pl-3.5 pr-1.5 py-1 text-[#044649] shadow-sm lg:flex"
-              >
-                <input
-                  type="search"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Destination..."
-                  aria-label="Search destination"
-                  className="w-36 bg-transparent text-xs text-[#044649] placeholder:text-[#044649]/60 outline-none"
-                />
-                <button
-                  type="submit"
-                  aria-label="Search destination"
-                  className="flex size-7 items-center justify-center rounded-full text-[#044649] transition-colors hover:bg-[#044649]/10"
+              <div className="mt-8 flex flex-wrap items-center gap-3">
+                <Link
+                  to="/home"
+                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
                 >
-                  <Search className="size-3.5" aria-hidden />
-                </button>
-              </form>
-
-              {/* Signature Rounded User / Launch Pill */}
-              <Link
-                to="/home"
-                className="inline-flex min-h-[38px] items-center gap-2 rounded-full bg-[#064e52]/95 py-1 pl-1.5 pr-3.5 text-xs font-semibold text-white ring-1 ring-white/25 backdrop-blur-sm transition-colors hover:bg-[#0a6b6f]"
-              >
-                <span className="flex size-6 items-center justify-center rounded-full bg-white text-[#044649]">
-                  <User className="size-3.5" aria-hidden />
-                </span>
-                <span>Open App</span>
-              </Link>
-            </div>
-          </header>
-
-          {/* Hero Main Grid */}
-          <main className="relative mx-auto max-w-7xl px-4 pb-12 pt-4 sm:px-6 sm:pb-16 sm:pt-8 lg:px-10 lg:pb-20 lg:pt-10">
-            <div className="grid items-end gap-8 lg:grid-cols-12 lg:gap-10">
-              {/* Left Rail + Headline Column */}
-              <div className="flex gap-5 lg:col-span-5">
-                {/* Signature Left Vertical Line + Icon Rail (Desktop) */}
-                <div
-                  aria-hidden
-                  className="hidden flex-col items-center justify-between py-2 sm:flex"
+                  Open Atlas Workspace
+                  <ArrowRight className="size-4" aria-hidden />
+                </Link>
+                <Link
+                  to="/overview"
+                  className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-5 py-3 text-sm font-medium text-foreground transition-colors hover:bg-accent"
                 >
-                  <div className="h-32 w-[2px] rounded-full bg-white/80" />
-                  <div className="mt-8 flex flex-col items-center gap-3 text-white/80">
-                    <Compass className="size-4" />
-                    <MapPin className="size-4" />
-                    <Route className="size-4" />
-                    <Sparkles className="size-4" />
-                  </div>
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#5eead4]">
-                    35.0116° N · 135.7681° E · AI Vacation Atlas
-                  </p>
-
-                  <h1 className="mt-3 text-3xl font-extrabold uppercase leading-[1.03] tracking-tight text-white sm:text-5xl lg:text-[3.15rem]">
-                    <span className="block">{'Chart every hour, '}</span>
-                    <span
-                      className="mt-1 block text-transparent"
-                      style={{ WebkitTextStroke: '1.5px rgba(255, 255, 255, 0.92)' }}
-                    >
-                      not just flights.
-                    </span>
-                  </h1>
-
-                  <p className="mt-4 max-w-md text-sm leading-relaxed text-white/85 sm:text-base">
-                    Sequence sights, local restaurants, day trips, and golden-hour photography
-                    windows around real transit times—steered by AI and shared live.
-                  </p>
-
-                  <div className="mt-6 flex flex-wrap items-center gap-3">
-                    <Link
-                      to="/trips/new"
-                      className="inline-flex min-h-[44px] items-center gap-2.5 rounded-md bg-[#0a6b6e] px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-white ring-1 ring-white/30 shadow-lg transition-all hover:bg-[#0d8286]"
-                    >
-                      <span>Start Planning</span>
-                      <span className="flex size-5 items-center justify-center rounded-full bg-white text-[#044649]">
-                        <Play className="size-2.5 fill-current" aria-hidden />
-                      </span>
-                    </Link>
-
-                    <Link
-                      to="/overview"
-                      className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md border border-white/30 bg-white/10 px-4 py-2.5 text-xs font-semibold text-white backdrop-blur-sm transition-colors hover:bg-white/20"
-                    >
-                      Overview Mode
-                      <ArrowRight className="size-3.5" aria-hidden />
-                    </Link>
-                  </div>
-
-                  {/* Chevron Motif */}
-                  <div
-                    aria-hidden
-                    className="mt-7 hidden select-none items-center gap-1 font-mono text-xs tracking-tight text-white/80 sm:flex"
-                  >
-                    <span>◄◄◄◄◄</span>
-                  </div>
-                </div>
+                  Try Overview Mode
+                </Link>
               </div>
+            </div>
 
-              {/* Right Column: Signature Crisp White Cards (Horizontal snap on mobile, 3-up grid on sm+) */}
-              <div className="lg:col-span-7">
-                <div className="no-scrollbar -mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 sm:pb-0">
-                  {HERO_CARDS.map((card) => (
-                    <article
-                      key={card.title}
-                      className="flex w-[76vw] max-w-[270px] shrink-0 snap-start flex-col justify-between overflow-hidden rounded-xl bg-white text-[#06383b] shadow-xl transition-transform duration-200 hover:-translate-y-1 sm:w-auto sm:max-w-none"
-                    >
-                      <div>
-                        <div className="aspect-[16/11] w-full overflow-hidden bg-[#0a5b5e]">
-                          <img
-                            src={card.image}
-                            alt={card.title}
-                            className="h-full w-full object-cover"
-                          />
-                        </div>
-                        <div className="p-4">
-                          <h2 className="text-sm font-bold leading-snug text-[#06383b]">
-                            {card.title}
-                          </h2>
-                          <p className="mt-1.5 text-xs leading-relaxed text-[#3f6a6c]">
-                            {card.subtitle}
-                          </p>
-                        </div>
-                      </div>
+            {/* Hero React Atlas Visual */}
+            <div className="lg:col-span-6">
+              <div className="rounded-2xl border border-border bg-card p-5 shadow-[var(--shadow-card-hover)]">
+                <div className="flex items-center justify-between border-b border-border pb-3">
+                  <div>
+                    <p className="font-mono text-[11px] uppercase tracking-wider text-primary">
+                      Day 01 · Optimized Route
+                    </p>
+                    <h2 className="mt-0.5 text-sm font-semibold text-foreground">
+                      Kyoto Higashiyama Loop
+                    </h2>
+                  </div>
+                  <span className="rounded-md border border-border bg-muted px-2.5 py-1 font-mono text-[11px] text-foreground">
+                    −38 min transit
+                  </span>
+                </div>
 
-                      <div className="px-4 pb-4">
-                        <Link
-                          to={card.to}
-                          className="inline-flex min-h-[34px] items-center gap-1.5 rounded-md bg-[#096c6e] px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#075355]"
-                        >
-                          <span>{card.cta}</span>
-                          <ArrowRight className="size-3" aria-hidden />
-                        </Link>
+                <div className="mt-4 space-y-2.5">
+                  {SAMPLE_LEGS.map((stop) => (
+                    <div key={stop.idx}>
+                      <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background/70 px-3.5 py-2.5">
+                        <div className="flex items-center gap-3">
+                          <span className="flex size-6 items-center justify-center rounded-full bg-primary font-mono text-[11px] font-bold text-primary-foreground">
+                            {stop.idx}
+                          </span>
+                          <div>
+                            <p className="text-sm font-medium text-foreground">{stop.title}</p>
+                            <p className="font-mono text-[11px] text-muted-foreground">
+                              {stop.time} · {stop.tag}
+                            </p>
+                          </div>
+                        </div>
+                        <Camera className="size-3.5 text-primary" aria-hidden />
                       </div>
-                    </article>
+                      {stop.leg && (
+                        <div className="ml-6 flex items-center gap-2 border-l border-dashed border-border py-1.5 pl-4 font-mono text-[11px] text-muted-foreground">
+                          <Clock className="size-3 text-primary" aria-hidden />
+                          <span>{stop.leg}</span>
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>
             </div>
-          </main>
-        </section>
+          </section>
 
-        {/* Below-the-fold Feature Highlights */}
-        <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-16 lg:px-10">
-          <div className="grid gap-6 md:grid-cols-12">
-            <div className="rounded-2xl border border-white/15 bg-[#065256] p-6 shadow-lg md:col-span-7">
-              <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-[#5eead4]">
+          {/* Alternating Asymmetric Showcase — avoids 3-identical-cards pattern */}
+          <section className="mt-20 grid gap-6 border-t border-border pt-14 md:grid-cols-12">
+            <div className="rounded-2xl border border-border bg-card p-6 md:col-span-7">
+              <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-primary">
                 <Route className="size-4" aria-hidden />
                 <span>Broad Overview + Route Engine</span>
               </div>
-              <h2 className="mt-3 text-xl font-bold text-white">
-                Know how many days each destination actually earns.
+              <h2 className="mt-3 text-xl font-semibold text-foreground">
+                Know how many days each city actually earns.
               </h2>
-              <p className="mt-2 text-sm leading-relaxed text-white/80">
-                Test candidate cities and total travel days in Overview Mode to balance intercity
-                transit drag, then expand into an anchor-aware daily schedule with one click.
+              <p className="mt-2 text-sm text-muted-foreground">
+                Start in Overview Mode with candidate cities and total days to check transit drag
+                and pacing, then expand into an anchor-aware daily schedule.
               </p>
             </div>
 
-            <div className="flex flex-col justify-between rounded-2xl border border-white/15 bg-[#065256] p-6 shadow-lg md:col-span-5">
+            <div className="flex flex-col justify-between rounded-2xl border border-border bg-card p-6 md:col-span-5">
               <div>
-                <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-[#5eead4]">
+                <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-primary">
                   <Users className="size-4" aria-hidden />
                   <span>Viewer &amp; Editor Permissions</span>
                 </div>
-                <h2 className="mt-3 text-xl font-bold text-white">
+                <h2 className="mt-3 text-xl font-semibold text-foreground">
                   Co-plan live without accidental edits.
                 </h2>
-                <p className="mt-2 text-sm leading-relaxed text-white/80">
-                  Invite companions as read-only viewers or full editors with real-time Durable
-                  Object sync across desktop and mobile.
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Invite companions as read-only viewers or full editors with instant Durable Object
+                  sync.
                 </p>
               </div>
               <Link
                 to="/home"
-                className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold text-[#5eead4] hover:underline"
+                className="mt-6 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
               >
                 Explore the live sample trip
                 <ArrowRight className="size-3.5" aria-hidden />
               </Link>
             </div>
-          </div>
-        </section>
+          </section>
+        </main>
 
-        <footer className="border-t border-white/15 py-6">
-          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 text-xs text-white/70 sm:px-6 lg:px-10">
+        <footer className="relative border-t border-border py-6">
+          <div className="mx-auto flex max-w-6xl items-center justify-between px-6 text-xs text-muted-foreground">
             <span>{APP_NAME} · Built on DeepSpace</span>
-            <Link to="/home" className="font-medium text-white hover:text-[#5eead4]">
-              Launch Workspace
+            <Link to="/home" className="hover:text-foreground">
+              Launch app
             </Link>
           </div>
         </footer>
