@@ -231,4 +231,18 @@
   a, button, [role="button"], input, select, textarea {
     touch-action: manipulation;
   }
+
+  /* Match Leaflet map canvas and zoom controls to active atlas theme */
+  .leaflet-container {
+    background-color: var(--color-card) !important;
+    font-family: inherit !important;
+  }
+  .leaflet-bar a {
+    background-color: var(--color-card) !important;
+    color: var(--color-foreground) !important;
+    border-color: var(--color-border) !important;
+  }
+  .leaflet-bar a:hover {
+    background-color: var(--color-accent) !important;
+  }
 }
