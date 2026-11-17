@@ -70,7 +70,7 @@ export default function SettingsPage() {
     const param = searchParams.get('google_gemini')
     if (!param) return
     if (param === 'connected') {
-      success('Google Gemini linked', 'You can now select Gemini 2.5 models in the AI Concierge.')
+      success('Google Gemini linked', 'You can now select Gemini 4 Hydrogen & 3.8 Flash in the AI Concierge.')
       window.dispatchEvent(new Event('trippie:google-ai-updated'))
       void loadGeminiStatus()
     } else if (param === 'error') {
@@ -123,7 +123,7 @@ export default function SettingsPage() {
         throw new Error(body.error || 'Could not link Gemini key')
       }
       setApiKeyInput('')
-      success('Google Gemini linked', 'Gemini 2.5 Flash & Pro are now active in the AI Concierge.')
+      success('Google Gemini linked', 'Gemini 4 Hydrogen & 3.8 Flash are now active in the AI Concierge.')
       window.dispatchEvent(new Event('trippie:google-ai-updated'))
       await loadGeminiStatus()
     } catch (err) {
@@ -182,9 +182,10 @@ export default function SettingsPage() {
           </div>
 
           <p className="text-sm text-muted-foreground">
-            Link your Google account so you can choose <strong>Gemini 2.5 Flash</strong> or{' '}
-            <strong>Gemini 2.5 Pro</strong> inside the AI Concierge. Your credentials stay stored
-            server-side only and are never exposed to other users.
+            Link your Google account so you can choose <strong>Gemini 4 Hydrogen</strong>,{' '}
+            <strong>Carbon</strong>, <strong>Argon</strong>, or{' '}
+            <strong>Gemini 3.8 / 3.5 Flash</strong> inside the AI Concierge. Your credentials stay
+            stored server-side only and are never exposed to other users.
           </p>
 
           {geminiStatus?.connected && (
@@ -194,7 +195,7 @@ export default function SettingsPage() {
                   {geminiStatus.googleEmail || 'Google Gemini Active'}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Select Gemini 2.5 Flash or Gemini 2.5 Pro from the model menu in the AI Concierge.
+                  Select Gemini 4 Hydrogen or Gemini 3.8 Flash from the model menu in the AI Concierge.
                 </p>
               </div>
               <Button

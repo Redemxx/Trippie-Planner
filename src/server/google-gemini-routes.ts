@@ -16,8 +16,11 @@ function fromBase64Url(str: string): Uint8Array {
 }
 
 export const GEMINI_MODELS = [
-  { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'Google Gemini' },
-  { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', provider: 'Google Gemini' },
+  { id: 'gemini-4-hydrogen', label: 'Gemini 4 Hydrogen', provider: 'Google Gemini' },
+  { id: 'gemini-4-carbon', label: 'Gemini 4 Carbon', provider: 'Google Gemini' },
+  { id: 'gemini-4-argon', label: 'Gemini 4 Argon', provider: 'Google Gemini' },
+  { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', provider: 'Google Gemini' },
+  { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', provider: 'Google Gemini' },
 ] as const
 
 export type GeminiModelId = (typeof GEMINI_MODELS)[number]['id']
