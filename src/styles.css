@@ -134,6 +134,12 @@
 }
 
 @utility fade-in-0 { --tw-enter-opacity: 0; }
+@utility font-editorial-display {
+  font-family: 'EB Garamond', Georgia, 'Times New Roman', serif;
+}
+@utility font-editorial-body {
+  font-family: 'Host Grotesk', 'SF Pro Text', -apple-system, BlinkMacSystemFont, sans-serif;
+}
 @utility fade-out-0 { --tw-exit-opacity: 0; }
 @utility zoom-in-95 { --tw-enter-scale: .95; }
 @utility zoom-out-95 { --tw-exit-scale: .95; }
