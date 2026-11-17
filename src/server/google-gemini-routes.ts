@@ -1,5 +1,9 @@
 import type { Hono } from 'hono'
 import type { AppContext, Env } from '../../worker.js'
+import {
+  decryptCredentialSecret,
+  encryptCredentialSecret,
+} from '../lib/credential-crypto.js'
 import { resolveAuth } from './http-routes.js'
 import { createServerRecordTools } from './trip-helpers.js'
 
@@ -41,7 +45,16 @@ export type StoredGoogleCredential = {
 }
 
 function hmacSecret(env: Env): string {
-  return env.APP_IDENTITY_TOKEN || env.APP_OWNER_JWT || env.DEEPSPACE_APP_ID
+  return env.USER_CREDENTIALS_ENCRYPTION_KEY || env.APP_IDENTITY_TOKEN || env.APP_OWNER_JWT || env.DEEPSPACE_APP_ID
+}
+
+function credentialEncryptionKey(env: Env): string {
+  return (
+    env.USER_CREDENTIALS_ENCRYPTION_KEY ||
+    env.APP_IDENTITY_TOKEN ||
+    env.APP_OWNER_JWT ||
+    env.DEEPSPACE_APP_ID
+  )
 }
 
 async function hmacSign(data: string, secret: string): Promise<string> {
@@ -99,28 +112,36 @@ export async function getUserGeminiCredential(
   const rec = q.data.records[0]
   const data = rec.data
 
+  const encKey = credentialEncryptionKey(env)
+
   if (data.authType === 'api_key' && data.apiKey) {
+    const apiKey = await decryptCredentialSecret(data.apiKey, encKey, userId)
+    if (!apiKey) return null
     return {
       recordId: rec.recordId,
       authType: 'api_key',
       googleEmail: data.googleEmail,
-      apiKey: data.apiKey,
+      apiKey,
     }
   }
 
   if (data.authType === 'oauth' && data.accessToken) {
-    let accessToken = data.accessToken
+    let accessToken = await decryptCredentialSecret(data.accessToken, encKey, userId)
+    if (!accessToken) return null
+    const refreshToken = data.refreshToken
+      ? await decryptCredentialSecret(data.refreshToken, encKey, userId)
+      : null
     const needsRefresh =
       typeof data.expiresAt === 'number' && Date.now() >= data.expiresAt - 60_000
 
-    if (needsRefresh && data.refreshToken && env.GOOGLE_OAUTH_CLIENT_ID && env.GOOGLE_OAUTH_CLIENT_SECRET) {
+    if (needsRefresh && refreshToken && env.GOOGLE_OAUTH_CLIENT_ID && env.GOOGLE_OAUTH_CLIENT_SECRET) {
       const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           client_id: env.GOOGLE_OAUTH_CLIENT_ID,
           client_secret: env.GOOGLE_OAUTH_CLIENT_SECRET,
-          refresh_token: data.refreshToken,
+          refresh_token: refreshToken,
           grant_type: 'refresh_token',
         }),
       })
@@ -131,8 +152,9 @@ export async function getUserGeminiCredential(
         }
         if (refreshed.access_token) {
           accessToken = refreshed.access_token
+          const encryptedAccess = await encryptCredentialSecret(accessToken, encKey, userId)
           await tools.update('user_ai_credentials', rec.recordId, {
-            accessToken,
+            accessToken: encryptedAccess,
             expiresAt: Date.now() + (refreshed.expires_in ?? 3600) * 1000,
           })
         }
@@ -155,18 +177,30 @@ async function upsertGoogleCredential(
   userId: string,
   cred: Omit<StoredGoogleCredential, 'userId' | 'provider'>,
 ): Promise<void> {
+  const encKey = credentialEncryptionKey(env)
+  const encryptedCred: Omit<StoredGoogleCredential, 'userId' | 'provider'> = {
+    ...cred,
+    apiKey: cred.apiKey ? await encryptCredentialSecret(cred.apiKey, encKey, userId) : undefined,
+    accessToken: cred.accessToken
+      ? await encryptCredentialSecret(cred.accessToken, encKey, userId)
+      : undefined,
+    refreshToken: cred.refreshToken
+      ? await encryptCredentialSecret(cred.refreshToken, encKey, userId)
+      : undefined,
+  }
+
   const tools = createServerRecordTools(env, userId, env.APP_OWNER_JWT ?? '')
   const existing = await tools.query<StoredGoogleCredential>('user_ai_credentials', {
     where: { userId, provider: 'google_gemini' },
     limit: 1,
   })
   if (existing.success && existing.data.records.length > 0) {
-    await tools.update('user_ai_credentials', existing.data.records[0].recordId, cred)
+    await tools.update('user_ai_credentials', existing.data.records[0].recordId, encryptedCred)
   } else {
     await tools.create('user_ai_credentials', {
       userId,
       provider: 'google_gemini',
-      ...cred,
+      ...encryptedCred,
     })
   }
 }
@@ -252,8 +286,8 @@ export function registerGoogleGeminiRoutes(app: Hono<AppContext>): void {
     const tokenParam = c.req.query('token')
     const reqWithAuth = tokenParam
       ? new Request(c.req.url, {
-          headers: { Authorization: `Bearer ${tokenParam}` },
-        })
+        headers: { Authorization: `Bearer ${tokenParam}` },
+      })
       : c.req.raw
     const auth = await resolveAuth(reqWithAuth, c.env)
     if (!auth) return c.json({ error: 'Unauthorized' }, 401)

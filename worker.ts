@@ -125,6 +125,8 @@ export interface Env extends DOBindings<typeof __DO_MANIFEST__> {
   /** Optional Google OAuth client credentials for per-user Gemini OAuth linking. */
   GOOGLE_OAUTH_CLIENT_ID?: string
   GOOGLE_OAUTH_CLIENT_SECRET?: string
+  /** Per-app AES-256-GCM key derivation secret for encrypting stored user AI credentials. */
+  USER_CREDENTIALS_ENCRYPTION_KEY?: string
 }
 
 export type AppContext = { Bindings: Env }
