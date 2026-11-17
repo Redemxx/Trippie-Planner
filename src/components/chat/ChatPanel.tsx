@@ -334,13 +334,29 @@ export function ChatPanel({
           <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-destructive">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
             <div className="flex-1 text-[13px] leading-relaxed">{error.message}</div>
-            <button
-              type="button"
-              onClick={retry}
-              className="rounded-md border border-destructive/30 px-2 py-0.5 text-[12px] font-medium transition-colors hover:bg-destructive/10"
-            >
-              Retry
-            </button>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {modelId?.startsWith('gemini-') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const fallback =
+                      models.find((m) => m.id === 'claude-sonnet-5-5') ??
+                      models.find((m) => !m.id.startsWith('gemini-'))
+                    if (fallback) selectModel(fallback.id)
+                  }}
+                  className="rounded-md border border-destructive/30 px-2 py-0.5 text-[12px] font-medium transition-colors hover:bg-destructive/10"
+                >
+                  Switch to Claude
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={retry}
+                className="rounded-md border border-destructive/30 px-2 py-0.5 text-[12px] font-medium transition-colors hover:bg-destructive/10"
+              >
+                Retry
+              </button>
+            </div>
           </div>
         </div>
       )}

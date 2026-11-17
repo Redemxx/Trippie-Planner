@@ -44,6 +44,7 @@ import {
 import type { AgentToolAccessResult, AgentToolRouteOptions, ChatTurn } from 'deepspace/worker'
 import { schemas } from '../schemas.js'
 import { buildSystemPrompt } from './tools.js'
+import { createResilientGeminiModel, formatGeminiError } from './gemini-fallback.js'
 import { assertTripAccess, createServerRecordTools } from '../server/trip-helpers.js'
 import {
   GEMINI_MODELS,
@@ -444,15 +445,30 @@ export function registerAiChatRoutes(
             })
           : createGoogleGenerativeAI({ apiKey: geminiCred.apiKey })
 
+      let activeGeminiModelId = usedModelId
+      const resilientModel = createResilientGeminiModel(
+        (id) => googleProvider(id),
+        usedModelId,
+        {
+          onFallback: (fromModel, toModel) => {
+            activeGeminiModelId = toModel
+            console.warn(`[ai-chat] gemini fallback ${fromModel} -> ${toModel} due to capacity`)
+          },
+        },
+      )
+
       streamResult = streamText({
-        model: googleProvider(usedModelId) as unknown as Parameters<typeof streamText>[0]['model'],
+        model: resilientModel as unknown as Parameters<typeof streamText>[0]['model'],
         system: systemText,
         messages,
         tools,
+        maxRetries: 0,
         stopWhen: stepCountIs(21),
         abortSignal: c.req.raw.signal,
         onError: ({ error }) => {
-          console.error(`[ai-chat] gemini stream error: ${loggableError(error)}`)
+          console.error(
+            `[ai-chat] gemini stream error (model=${activeGeminiModelId}): ${loggableError(error)}`,
+          )
         },
         onEnd: ({ text, responseMessages }) =>
           persistTurn(text, responseMessages as ModelMessage[]),
@@ -514,7 +530,11 @@ export function registerAiChatRoutes(
           // error. Surface the real message so RBAC denials and validation
           // failures are debuggable; log full detail server-side.
           console.error(`[ai-chat] response error: ${loggableError(error)}`)
-          return error instanceof Error ? error.message : String(error)
+          return usingGemini
+            ? formatGeminiError(error)
+            : error instanceof Error
+              ? error.message
+              : String(error)
         },
       }),
     })
