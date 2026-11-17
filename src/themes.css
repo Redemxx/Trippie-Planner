@@ -1,0 +1,64 @@
+/*
+ * Theme overrides — applied via <html data-theme="<id>">.
+ *
+ * `atlas` (default): Sleek Dark Atlas — deep obsidian-navy flight deck,
+ * compass-amber gold accent, and crisp cartographic hairlines.
+ * `cartographer`: Crisp Light Atlas — warm parchment shell with deep sea-teal
+ * accent for bright daylight map reading.
+ */
+
+[data-theme="atlas"] {
+  color-scheme: dark;
+  --color-background: #090d14;
+  --color-foreground: #e6edf7;
+  --color-card: #121a27;
+  --color-card-foreground: #e6edf7;
+  --color-popover: #141e2e;
+  --color-popover-foreground: #e6edf7;
+  --color-primary: #e5a93c;
+  --color-primary-foreground: #090d14;
+  --color-secondary: #182334;
+  --color-secondary-foreground: #dce5f2;
+  --color-muted: #162030;
+  --color-muted-foreground: #8b9bb4;
+  --color-accent: #1e2c40;
+  --color-accent-foreground: #f2f6fc;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #ffffff;
+  --color-border: rgba(139, 155, 180, 0.22);
+  --color-input: rgba(139, 155, 180, 0.28);
+  --color-ring: #e5a93c;
+  --radius: 0.5rem;
+  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.35);
+  --shadow-card-hover: 0 6px 18px 0 rgba(0, 0, 0, 0.45);
+  --color-shell: #090d14;
+  --color-shell-panel: #0f1622;
+}
+
+[data-theme="cartographer"] {
+  color-scheme: light;
+  --color-background: #f5f3ee;
+  --color-foreground: #141923;
+  --color-card: #ffffff;
+  --color-card-foreground: #141923;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #141923;
+  --color-primary: #b87614;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #ebe7de;
+  --color-secondary-foreground: #141923;
+  --color-muted: #edeae2;
+  --color-muted-foreground: #525d70;
+  --color-accent: #e4dfd3;
+  --color-accent-foreground: #141923;
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #ffffff;
+  --color-border: rgba(20, 25, 35, 0.14);
+  --color-input: rgba(20, 25, 35, 0.18);
+  --color-ring: #b87614;
+  --radius: 0.5rem;
+  --shadow-card: 0 1px 2px 0 rgba(20, 25, 35, 0.04);
+  --shadow-card-hover: 0 4px 12px 0 rgba(20, 25, 35, 0.08);
+  --color-shell: #ebe7de;
+  --color-shell-panel: #fcfbf8;
+}

@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="atlas">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/favicon.ico" />
+    <title>Trippie — Atlas Vacation Planner</title>
+    <style>
+      html { background-color: #090d14; color-scheme: dark; }
+      html[data-theme="cartographer"] { background-color: #f5f3ee; color-scheme: light; }
+    </style>
+    <script>
+      try {
+        var t = localStorage.getItem('ui-theme')
+        if (t === 'atlas' || t === 'cartographer') {
+          document.documentElement.setAttribute('data-theme', t)
+        }
+      } catch (e) { /* private mode — keep the default */ }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
