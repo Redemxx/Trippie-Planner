@@ -5,6 +5,7 @@ import {
   Download,
   Lock,
   MapPin,
+  Pencil,
   RefreshCw,
   Share2,
   Sparkles,
@@ -19,10 +20,19 @@ import {
   Button,
   ConfirmModal,
   EmptyState,
+  Input,
+  Label,
+  Modal,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
+  Textarea,
   useToast,
 } from '@/components/ui'
 import { AtlasMap } from '@/components/trip/AtlasMap'
@@ -35,15 +45,36 @@ import { useTripChat } from '@/contexts/TripChatContext'
 import { callTripAction } from '@/lib/actions-client'
 import { itineraryToMarkdown } from '@/lib/export-itinerary'
 import type {
+  BudgetTier,
   ChecklistData,
   DestinationData,
   OverviewData,
   StopCategory,
   StopData,
   TeamMemberData,
+  TransportMode,
   TripAccessRole,
   TripData,
+  TripPace,
 } from '@/lib/trip-types'
+
+const PACE_LABELS: Record<TripPace, string> = {
+  relaxed: 'Relaxed',
+  balanced: 'Balanced',
+  packed: 'Packed',
+}
+
+const BUDGET_LABELS: Record<BudgetTier, string> = {
+  budget: 'Budget',
+  moderate: 'Moderate',
+  luxury: 'Luxury',
+}
+
+const TRANSPORT_LABELS: Record<TransportMode, string> = {
+  walk: 'Walk',
+  transit: 'Public Transit',
+  drive: 'Car / Taxi',
+}
 
 export default function TripWorkspacePage() {
   const { tripId = '' } = useParams()
@@ -127,6 +158,17 @@ export default function TripWorkspacePage() {
   const [shareOpen, setShareOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [editTitle, setEditTitle] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+  const [editStartDate, setEditStartDate] = useState('')
+  const [editEndDate, setEditEndDate] = useState('')
+  const [editTotalDays, setEditTotalDays] = useState('5')
+  const [editTravelers, setEditTravelers] = useState('2')
+  const [editPace, setEditPace] = useState<TripPace>('balanced')
+  const [editBudget, setEditBudget] = useState<BudgetTier>('moderate')
+  const [editTransport, setEditTransport] = useState<TransportMode>('transit')
   const [acceptingInvite, setAcceptingInvite] = useState(false)
   const [weatherLoadingId, setWeatherLoadingId] = useState<string | null>(null)
   const [showAuthModal, setShowAuthModal] = useState(false)
@@ -204,6 +246,48 @@ export default function TripWorkspacePage() {
       error('Delete failed', err instanceof Error ? err.message : 'Failed')
     } finally {
       setDeleting(false)
+    }
+  }
+
+  function openEditTripModal() {
+    if (!trip) return
+    setEditTitle(trip.title)
+    setEditDescription(trip.summaryNotes ?? '')
+    setEditStartDate(trip.startDate ?? '')
+    setEditEndDate(trip.endDate ?? '')
+    setEditTotalDays(String(trip.totalDays ?? 5))
+    setEditTravelers(String(trip.travelers ?? 2))
+    setEditPace(trip.pace ?? 'balanced')
+    setEditBudget(trip.budgetTier ?? 'moderate')
+    setEditTransport(trip.transportPreference ?? 'transit')
+    setEditOpen(true)
+  }
+
+  async function handleSaveTripDetails() {
+    if (!editTitle.trim()) {
+      error('Trip title required', 'Please enter a title for this trip.')
+      return
+    }
+    setSavingEdit(true)
+    try {
+      await callTripAction('updateTripDetails', {
+        tripId,
+        title: editTitle.trim(),
+        summaryNotes: editDescription.trim(),
+        startDate: editStartDate || '',
+        endDate: editEndDate || '',
+        totalDays: Math.max(1, Number(editTotalDays) || 5),
+        travelers: Math.max(1, Number(editTravelers) || 2),
+        pace: editPace,
+        budgetTier: editBudget,
+        transportPreference: editTransport,
+      })
+      setEditOpen(false)
+      success('Trip updated', 'Saved trip title, description, and settings.')
+    } catch (err) {
+      error('Could not update trip', err instanceof Error ? err.message : 'Failed')
+    } finally {
+      setSavingEdit(false)
     }
   }
 
@@ -314,9 +398,19 @@ export default function TripWorkspacePage() {
             <h1 className="mt-2 text-2xl font-bold tracking-tight text-foreground md:text-3xl" data-testid="trip-title">
               {trip.title}
             </h1>
-            {trip.summaryNotes && (
-              <p className="mt-1 max-w-2xl text-xs text-muted-foreground">{trip.summaryNotes}</p>
-            )}
+            {trip.summaryNotes ? (
+              <p className="mt-1 max-w-2xl text-xs text-muted-foreground" data-testid="trip-description">
+                {trip.summaryNotes}
+              </p>
+            ) : canEdit ? (
+              <button
+                type="button"
+                onClick={openEditTripModal}
+                className="mt-1 text-xs text-muted-foreground underline-offset-4 hover:text-primary hover:underline"
+              >
+                + Add trip description
+              </button>
+            ) : null}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -334,6 +428,18 @@ export default function TripWorkspacePage() {
                 </div>
                 <span className="text-muted-foreground">{peers.length} online</span>
               </div>
+            )}
+
+            {canEdit && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={openEditTripModal}
+                data-testid="edit-trip-button"
+              >
+                <Pencil className="size-3.5" aria-hidden />
+                Edit Trip
+              </Button>
             )}
 
             <Button
@@ -580,6 +686,149 @@ export default function TripWorkspacePage() {
         variant="destructive"
         loading={deleting}
       />
+
+      {canEdit && (
+        <Modal open={editOpen} onClose={() => setEditOpen(false)}>
+          <Modal.Header>
+            <h3 className="text-base font-semibold text-foreground">Edit Trip Details</h3>
+          </Modal.Header>
+          <Modal.Body className="space-y-4">
+            <div>
+              <Label htmlFor="edit-trip-title">Trip title</Label>
+              <Input
+                id="edit-trip-title"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="edit-trip-description">Trip description &amp; AI guidance</Label>
+              <Textarea
+                id="edit-trip-description"
+                rows={3}
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                placeholder="Describe trip goals, dietary notes, photography priorities..."
+              />
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="edit-start-date">Start date</Label>
+                <Input
+                  id="edit-start-date"
+                  type="date"
+                  value={editStartDate}
+                  onChange={(e) => setEditStartDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-end-date">End date</Label>
+                <Input
+                  id="edit-end-date"
+                  type="date"
+                  value={editEndDate}
+                  onChange={(e) => setEditEndDate(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="edit-total-days">Total days</Label>
+                <Input
+                  id="edit-total-days"
+                  type="number"
+                  min={1}
+                  max={60}
+                  value={editTotalDays}
+                  onChange={(e) => setEditTotalDays(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-travelers">Travelers</Label>
+                <Input
+                  id="edit-travelers"
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={editTravelers}
+                  onChange={(e) => setEditTravelers(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div>
+                <Label>Pace</Label>
+                <Select
+                  value={editPace}
+                  onValueChange={(v) => v && setEditPace(v as TripPace)}
+                  items={PACE_LABELS}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(PACE_LABELS).map(([k, label]) => (
+                      <SelectItem key={k} value={k}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Budget</Label>
+                <Select
+                  value={editBudget}
+                  onValueChange={(v) => v && setEditBudget(v as BudgetTier)}
+                  items={BUDGET_LABELS}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(BUDGET_LABELS).map(([k, label]) => (
+                      <SelectItem key={k} value={k}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Default transit</Label>
+                <Select
+                  value={editTransport}
+                  onValueChange={(v) => v && setEditTransport(v as TransportMode)}
+                  items={TRANSPORT_LABELS}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(TRANSPORT_LABELS).map(([k, label]) => (
+                      <SelectItem key={k} value={k}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>
+              Cancel
+            </Button>
+            <Button loading={savingEdit} onClick={handleSaveTripDetails} data-testid="save-trip-details-btn">
+              Save Changes
+            </Button>
+          </Modal.Footer>
+        </Modal>
+      )}
     </div>
   )
 }

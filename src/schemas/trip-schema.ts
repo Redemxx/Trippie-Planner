@@ -278,6 +278,37 @@ export const tripInvitesSchema: CollectionSchema = {
   },
 }
 
+export const userAiCredentialsSchema: CollectionSchema = {
+  name: 'user_ai_credentials',
+  columns: [
+    { name: 'userId', storage: 'text', interpretation: 'plain', required: true },
+    {
+      name: 'provider',
+      storage: 'text',
+      interpretation: { kind: 'select', options: ['google_gemini'] },
+      required: true,
+    },
+    {
+      name: 'authType',
+      storage: 'text',
+      interpretation: { kind: 'select', options: ['oauth', 'api_key'] },
+      required: true,
+    },
+    { name: 'googleEmail', storage: 'text', interpretation: 'plain' },
+    { name: 'apiKey', storage: 'text', interpretation: 'plain' },
+    { name: 'accessToken', storage: 'text', interpretation: 'plain' },
+    { name: 'refreshToken', storage: 'text', interpretation: 'plain' },
+    { name: 'expiresAt', storage: 'number', interpretation: 'plain' },
+  ],
+  uniqueOn: ['userId', 'provider'],
+  permissions: {
+    '*': PRIVATE_ROLE_DENIED,
+    viewer: PRIVATE_ROLE_DENIED,
+    member: PRIVATE_ROLE_DENIED,
+    admin: PRIVATE_ROLE_DENIED,
+  },
+}
+
 export const tripSchemas: CollectionSchema[] = [
   teamMembersSchema,
   tripsSchema,
@@ -286,4 +317,5 @@ export const tripSchemas: CollectionSchema[] = [
   tripOverviewsSchema,
   tripChecklistsSchema,
   tripInvitesSchema,
+  userAiCredentialsSchema,
 ]

@@ -13,7 +13,7 @@ test.describe('API tests', () => {
     await page.waitForSelector('[data-testid="app-navigation"]', { timeout: 15000 })
   })
 
-  test('unauthenticated requests to actions and AI chat are rejected with 401', async ({
+  test('unauthenticated requests to actions, AI chat, and Google Gemini status are rejected with 401', async ({
     request,
   }) => {
     const actionRes = await request.post('/api/actions/createTrip', {
@@ -25,6 +25,14 @@ test.describe('API tests', () => {
       data: { chatId: 'c1', userMessageId: 'm1', content: 'Hello' },
     })
     expect(chatRes.status()).toBe(401)
+
+    const geminiStatusRes = await request.get('/api/ai/google/status')
+    expect(geminiStatusRes.status()).toBe(401)
+
+    const mapCfg = await request.get('/api/map-config')
+    expect(mapCfg.status()).toBe(200)
+    const mapBody = (await mapCfg.json()) as { provider?: string }
+    expect(['osm', 'carto']).toContain(mapBody.provider)
   })
 
   test('signed-in CRUD, route optimization, and overview actions work end-to-end', async ({
@@ -177,6 +185,15 @@ test.describe('API tests', () => {
 
       await alice.page.goto(`/trips/${tripId}`)
       await expect(alice.page.getByTestId('trip-workspace')).toBeVisible({ timeout: 15000 })
+
+      // Verify editing trip description via Edit Trip modal
+      await alice.page.getByTestId('edit-trip-button').click()
+      await alice.page.getByLabel(/Trip description/i).fill('Updated golden-hour route notes')
+      await alice.page.getByTestId('save-trip-details-btn').click()
+      await expect(alice.page.getByTestId('trip-description')).toHaveText(
+        'Updated golden-hour route notes',
+      )
+
       await alice.page.getByRole('tab', { name: /Discover/i }).click()
       await alice.page.getByRole('button', { name: 'Search Places' }).click()
       await expect(alice.page.getByText('Philosopher Path Overlook')).toBeVisible()
@@ -188,5 +205,57 @@ test.describe('API tests', () => {
         })
       }
     }
+  })
+
+  test('Google Gemini settings UI renders and handles link/disconnect flow', async ({ users }) => {
+    test.skip(usableTestAccounts < 1, 'Needs at least 1 usable test account')
+    const [alice] = await users(1)
+
+    await alice.page.route('**/api/ai/google/api-key', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          connected: true,
+          authType: 'api_key',
+          googleEmail: 'traveler@gmail.com',
+        }),
+      })
+    })
+
+    let statusConnected = false
+    await alice.page.route('**/api/ai/google/status', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          connected: statusConnected,
+          authType: statusConnected ? 'api_key' : null,
+          googleEmail: statusConnected ? 'traveler@gmail.com' : null,
+          oauthConfigured: false,
+          models: [],
+        }),
+      })
+    })
+
+    await alice.page.route('**/api/ai/google/disconnect', async (route) => {
+      statusConnected = false
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ connected: false }),
+      })
+    })
+
+    await alice.page.goto('/settings')
+    await expect(alice.page.getByTestId('google-gemini-settings')).toBeVisible({ timeout: 15000 })
+
+    statusConnected = true
+    await alice.page.getByLabel('Gemini API Key').fill('AIzaSyDemoTestKey1234567890')
+    await alice.page.getByTestId('save-gemini-key-btn').click()
+    await expect(alice.page.getByText('traveler@gmail.com')).toBeVisible({ timeout: 10000 })
+
+    await alice.page.getByTestId('disconnect-gemini-btn').click()
+    await expect(alice.page.getByText('Not linked')).toBeVisible({ timeout: 10000 })
   })
 })

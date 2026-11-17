@@ -22,7 +22,8 @@ import {
   ChevronDown,
   Square,
 } from 'lucide-react'
-import { listDeepSpaceAgentModels, useQuery } from 'deepspace'
+import { Link } from 'react-router-dom'
+import { getAuthToken, listDeepSpaceAgentModels, useQuery } from 'deepspace'
 import { EmptyState, MessageTurn, ThinkingIndicator } from './ChatPanel.messages'
 import { useStreamingChat } from './ChatPanel.stream'
 
@@ -81,11 +82,15 @@ const DEFAULT_PROMPTS = [
   'List my collections',
 ]
 
-const DEFAULT_MODELS: ModelOption[] = listDeepSpaceAgentModels('application').map((model) => ({
-  id: model.id,
-  label: model.label,
-  provider: model.providerLabel,
-}))
+const DEFAULT_MODELS: ModelOption[] = [
+  ...listDeepSpaceAgentModels('application').map((model) => ({
+    id: model.id,
+    label: model.label,
+    provider: model.providerLabel,
+  })),
+  { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'Google Gemini' },
+  { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', provider: 'Google Gemini' },
+]
 
 export function ChatPanel({
   chatId,
@@ -109,6 +114,36 @@ export function ChatPanel({
   const [modelId, setModelId] = useState<string | undefined>(() =>
     initialModelId(models),
   )
+  const [googleLinked, setGoogleLinked] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    let active = true
+    async function checkGoogleStatus() {
+      try {
+        const token = await getAuthToken()
+        if (!token) return
+        const res = await fetch('/api/ai/google/status', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!res.ok) return
+        const body = (await res.json()) as { connected?: boolean }
+        if (active) setGoogleLinked(Boolean(body.connected))
+      } catch {
+        // ignore status probe failure
+      }
+    }
+    void checkGoogleStatus()
+    const onUpdated = () => void checkGoogleStatus()
+    window.addEventListener('trippie:google-ai-updated', onUpdated)
+    window.addEventListener('focus', onUpdated)
+    return () => {
+      active = false
+      window.removeEventListener('trippie:google-ai-updated', onUpdated)
+      window.removeEventListener('focus', onUpdated)
+    }
+  }, [userId])
+
+  const needsGoogleLink = Boolean(modelId?.startsWith('gemini-') && googleLinked === false)
 
   // A custom model list may change at runtime. Never keep sending an id the
   // picker no longer offers (the worker correctly rejects unknown ids).
@@ -308,6 +343,19 @@ export function ChatPanel({
       )}
 
       <div className={`shrink-0 border-t border-border/60 ${horizontalPadding} pb-4 pt-3`}>
+        {needsGoogleLink && (
+          <div className="mx-auto mb-2 flex w-full max-w-[44rem] items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs">
+            <span className="text-muted-foreground">
+              Link your Google account or Gemini key to use {selectedModel?.label}.
+            </span>
+            <Link
+              to="/settings"
+              className="shrink-0 font-medium text-primary hover:underline"
+            >
+              Link Google →
+            </Link>
+          </div>
+        )}
         <form
           onSubmit={(event) => {
             event.preventDefault()

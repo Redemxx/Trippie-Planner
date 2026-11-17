@@ -16,6 +16,34 @@ interface AtlasMapProps {
   className?: string
 }
 
+let cachedMapProvider: 'carto' | 'osm' | null = null
+
+async function resolveMapProvider(): Promise<'carto' | 'osm'> {
+  if (cachedMapProvider) return cachedMapProvider
+  try {
+    const res = await fetch('/api/map-config')
+    if (res.ok) {
+      const data = (await res.json()) as { provider?: string }
+      if (data.provider === 'carto') {
+        cachedMapProvider = 'carto'
+        return 'carto'
+      }
+    }
+  } catch {
+    // Fall back to OpenStreetMap (no API key required)
+  }
+  cachedMapProvider = 'osm'
+  return 'osm'
+}
+
+function tileUrlFor(provider: 'carto' | 'osm', isLight: boolean): string {
+  if (provider === 'carto') {
+    const style = isLight ? 'light_all' : 'dark_all'
+    return `/api/map-tiles/${style}/{z}/{x}/{y}`
+  }
+  return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
+}
+
 export function AtlasMap({
   stops,
   destinations = [],
@@ -27,6 +55,7 @@ export function AtlasMap({
   const mapRef = useRef<import('leaflet').Map | null>(null)
   const layerGroupRef = useRef<import('leaflet').LayerGroup | null>(null)
   const [tileMode, setTileMode] = useState<'leaflet' | 'svg'>('leaflet')
+  const [mapProvider, setMapProvider] = useState<'carto' | 'osm'>(cachedMapProvider ?? 'osm')
   const [themeVersion, setThemeVersion] = useState(0)
 
   const geoStops = useMemo(
@@ -39,11 +68,18 @@ export function AtlasMap({
   )
 
   useEffect(() => {
+    void resolveMapProvider().then((p) => setMapProvider(p))
+  }, [])
+
+  useEffect(() => {
     if (typeof MutationObserver === 'undefined') return
     const obs = new MutationObserver(() => setThemeVersion((v) => v + 1))
     obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
     return () => obs.disconnect()
   }, [])
+
+  const isLight = getActiveTheme() === 'cartographer'
+  const useOsmDarkFilter = mapProvider === 'osm' && !isLight
 
   useEffect(() => {
     let cancelled = false
@@ -55,34 +91,27 @@ export function AtlasMap({
         await import('leaflet/dist/leaflet.css')
         if (cancelled || !containerRef.current) return
 
+        const activeProvider = await resolveMapProvider()
+        const lightTheme = getActiveTheme() === 'cartographer'
+        const tileUrl = tileUrlFor(activeProvider, lightTheme)
+
         if (!mapRef.current) {
           const map = L.map(containerRef.current, {
             zoomControl: true,
             attributionControl: false,
           }).setView([35.0116, 135.7681], 12)
 
-          const isLight = getActiveTheme() === 'cartographer'
-          const tileUrl = isLight
-            ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
-            : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-
           const tileLayer = L.tileLayer(tileUrl, {
             maxZoom: 19,
-            subdomains: 'abcd',
           })
           tileLayer.addTo(map)
           layerGroupRef.current = L.layerGroup().addTo(map)
           mapRef.current = map
         } else {
-          // Update tile URL when theme toggles
           const map = mapRef.current
-          const isLight = getActiveTheme() === 'cartographer'
-          const nextUrl = isLight
-            ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
-            : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
           map.eachLayer((layer) => {
             if ('setUrl' in layer && typeof (layer as import('leaflet').TileLayer).setUrl === 'function') {
-              ;(layer as import('leaflet').TileLayer).setUrl(nextUrl)
+              ;(layer as import('leaflet').TileLayer).setUrl(tileUrl)
             }
           })
         }
@@ -104,7 +133,7 @@ export function AtlasMap({
             {
               color: '#e5a93c',
               weight: 2.5,
-              opacity: 0.85,
+              opacity: 0.9,
               dashArray: '6 6',
             },
           ).addTo(group)
@@ -114,7 +143,7 @@ export function AtlasMap({
             {
               color: '#38bdf8',
               weight: 2,
-              opacity: 0.8,
+              opacity: 0.85,
               dashArray: '4 6',
             },
           ).addTo(group)
@@ -163,7 +192,7 @@ export function AtlasMap({
     return () => {
       cancelled = true
     }
-  }, [geoStops, geoDests, selectedStopId, onSelectStop, themeVersion])
+  }, [geoStops, geoDests, selectedStopId, onSelectStop, themeVersion, mapProvider])
 
   useEffect(() => {
     return () => {
@@ -177,7 +206,9 @@ export function AtlasMap({
 
   return (
     <div
-      className={`relative overflow-hidden rounded-xl border border-border bg-card ${className}`}
+      className={`relative overflow-hidden rounded-xl border border-border bg-card ${
+        useOsmDarkFilter ? 'trippie-osm-dark' : ''
+      } ${className}`}
       data-testid="atlas-map"
     >
       {tileMode === 'leaflet' ? (

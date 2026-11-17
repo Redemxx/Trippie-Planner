@@ -13,8 +13,16 @@
  */
 
 import type { Context, Hono } from 'hono'
-import { createUIMessageStreamResponse, toUIMessageStream, type ModelMessage } from 'ai'
 import {
+  createUIMessageStreamResponse,
+  stepCountIs,
+  streamText,
+  toUIMessageStream,
+  type ModelMessage,
+} from 'ai'
+import { createGoogleGenerativeAI } from '@ai-sdk/google'
+import {
+  applySlidingWindow,
   deepSpaceAgentErrorSummary,
   prepareMessagesWithCompaction,
   listDeepSpaceAgentModels,
@@ -37,6 +45,11 @@ import type { AgentToolAccessResult, AgentToolRouteOptions, ChatTurn } from 'dee
 import { schemas } from '../schemas.js'
 import { buildSystemPrompt } from './tools.js'
 import { assertTripAccess, createServerRecordTools } from '../server/trip-helpers.js'
+import {
+  GEMINI_MODELS,
+  getUserGeminiCredential,
+  isGeminiModelId,
+} from '../server/google-gemini-routes.js'
 import type { DestinationData } from '../lib/trip-types.js'
 // Type-only — TypeScript strips these at runtime, so no circular import
 // with worker.ts (which imports `registerAiChatRoutes` from this file).
@@ -168,10 +181,14 @@ export function registerAiChatRoutes(
     if (content.length > MAX_USER_CONTENT_LENGTH) {
       return c.json({ error: `content exceeds ${MAX_USER_CONTENT_LENGTH} chars` }, 413)
     }
-    const selectedModel = resolveDeepSpaceAgentModel(modelId, 'application')
-    if (!selectedModel) {
+    const usingGemini = isGeminiModelId(modelId)
+    const selectedModel = usingGemini ? null : resolveDeepSpaceAgentModel(modelId, 'application')
+    if (!usingGemini && !selectedModel) {
       // Name the valid ids: the caller has no other way to learn them here.
-      const modelIds = listDeepSpaceAgentModels('application').map((model) => model.id)
+      const modelIds = [
+        ...listDeepSpaceAgentModels('application').map((model) => model.id),
+        ...GEMINI_MODELS.map((m) => m.id),
+      ]
       return c.json(
         {
           error: `Unknown modelId: ${modelId}. Valid: ${modelIds.join(', ')}`,
@@ -180,6 +197,20 @@ export function registerAiChatRoutes(
         },
         400,
       )
+    }
+
+    let geminiCred: Awaited<ReturnType<typeof getUserGeminiCredential>> = null
+    if (usingGemini) {
+      geminiCred = await getUserGeminiCredential(c.env, auth.userId)
+      if (!geminiCred) {
+        return c.json(
+          {
+            error: 'Link your Google account or Gemini API key in Preferences to use Gemini.',
+            code: 'google_gemini_not_linked',
+          },
+          400,
+        )
+      }
     }
 
     const stub = recordRoomStub(c.env)
@@ -224,12 +255,24 @@ export function registerAiChatRoutes(
         : undefined
 
     // User-billed: compaction is part of the user's chat experience, not infra.
-    const summarizer = makeDefaultSummarizer(c.env, { authToken: jwt })
-    const { messages: prepared, newSummary } = await prepareMessagesWithCompaction(
-      turns,
-      DEFAULT_CONTEXT_CONFIG,
-      { summarizer, cachedSummary },
-    )
+    let prepared: ChatTurn[]
+    let newSummary: { text: string; throughId: string } | undefined
+    try {
+      const summarizer = makeDefaultSummarizer(c.env, { authToken: jwt })
+      const compacted = await prepareMessagesWithCompaction(
+        turns,
+        DEFAULT_CONTEXT_CONFIG,
+        { summarizer, cachedSummary },
+      )
+      prepared = compacted.messages
+      newSummary = compacted.newSummary
+    } catch {
+      prepared = applySlidingWindow(
+        turns,
+        DEFAULT_CONTEXT_CONFIG.contextBudget,
+        DEFAULT_CONTEXT_CONFIG.minKept,
+      )
+    }
     if (newSummary) {
       await updateChat(stub, chatId, auth.userId, {
         compactedSummary: newSummary.text,
@@ -237,10 +280,10 @@ export function registerAiChatRoutes(
       })
     }
 
-    const usedModelId = selectedModel.modelId
+    const usedModelId = usingGemini ? (modelId as string) : selectedModel!.modelId
     const diagnosticContext = {
       profile: 'application' as const,
-      provider: selectedModel.provider,
+      provider: usingGemini ? 'google' : selectedModel!.provider,
       modelId: usedModelId,
     }
     const baseSystem = buildSystemPrompt(c.env.APP_NAME, schemas)
@@ -386,29 +429,69 @@ export function registerAiChatRoutes(
       })
     }
 
-    const { result } = streamDeepSpaceAgent(c.env, {
-      profile: 'application',
-      modelId: usedModelId,
-      authToken: jwt,
-      instructions: systemText,
-      messages,
-      tools,
-      // Cancel provider and tool work with the request. `onAbort` then saves
-      // any completed steps; a zero-step abort saves nothing.
-      abortSignal: c.req.raw.signal,
-      onError: ({ error }) => {
-        console.error(
-          `[ai-chat] stream error: ${deepSpaceAgentErrorSummary(error, diagnosticContext)}`,
-        )
-      },
-      onEnd: ({ text, responseMessages }) => persistTurn(text, responseMessages as ModelMessage[]),
-      // AI SDK skips `onEnd` on abort; keep the steps that did complete.
-      onAbort: ({ steps }) => {
-        const last = steps.at(-1)
-        if (!last) return
-        return persistTurn(last.text, steps.flatMap((step) => step.response.messages) as ModelMessage[])
-      },
-    })
+    let streamResult: { stream: ReturnType<typeof streamDeepSpaceAgent>['result']['stream'] }
+    if (usingGemini && geminiCred) {
+      const googleProvider =
+        geminiCred.authType === 'oauth' && geminiCred.accessToken
+          ? createGoogleGenerativeAI({
+              apiKey: 'oauth-token',
+              fetch: (input, init) => {
+                const headers = new Headers(init?.headers)
+                headers.delete('x-goog-api-key')
+                headers.set('Authorization', `Bearer ${geminiCred.accessToken}`)
+                return fetch(input, { ...init, headers })
+              },
+            })
+          : createGoogleGenerativeAI({ apiKey: geminiCred.apiKey })
+
+      streamResult = streamText({
+        model: googleProvider(usedModelId) as unknown as Parameters<typeof streamText>[0]['model'],
+        system: systemText,
+        messages,
+        tools,
+        stopWhen: stepCountIs(21),
+        abortSignal: c.req.raw.signal,
+        onError: ({ error }) => {
+          console.error(`[ai-chat] gemini stream error: ${loggableError(error)}`)
+        },
+        onEnd: ({ text, responseMessages }) =>
+          persistTurn(text, responseMessages as ModelMessage[]),
+        onAbort: ({ steps }) => {
+          const last = steps.at(-1)
+          if (!last) return
+          return persistTurn(
+            last.text,
+            steps.flatMap((step) => step.response.messages) as ModelMessage[],
+          )
+        },
+      })
+    } else {
+      const { result } = streamDeepSpaceAgent(c.env, {
+        profile: 'application',
+        modelId: usedModelId,
+        authToken: jwt,
+        instructions: systemText,
+        messages,
+        tools,
+        abortSignal: c.req.raw.signal,
+        onError: ({ error }) => {
+          console.error(
+            `[ai-chat] stream error: ${deepSpaceAgentErrorSummary(error, diagnosticContext)}`,
+          )
+        },
+        onEnd: ({ text, responseMessages }) =>
+          persistTurn(text, responseMessages as ModelMessage[]),
+        onAbort: ({ steps }) => {
+          const last = steps.at(-1)
+          if (!last) return
+          return persistTurn(
+            last.text,
+            steps.flatMap((step) => step.response.messages) as ModelMessage[],
+          )
+        },
+      })
+      streamResult = result
+    }
 
     return createUIMessageStreamResponse({
       headers: {
@@ -418,7 +501,7 @@ export function registerAiChatRoutes(
         'X-Asst-Id': asstId,
       },
       stream: toUIMessageStream({
-        stream: result.stream,
+        stream: streamResult.stream,
         // Reasoning models (o-series, Claude with extended thinking) emit
         // `reasoning-start`/`reasoning-delta`/`reasoning-end` chunks. We
         // don't render them today — pass them through and the user sees a

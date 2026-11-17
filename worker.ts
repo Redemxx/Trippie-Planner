@@ -26,12 +26,14 @@ import { tasks as cronTasks, runTask as runCronTask } from './src/cron.js'
 import { runJob } from './src/jobs.js'
 import { schemas } from './src/schemas.js'
 import { registerActionRoutes } from './src/server/action-routes.js'
+import { registerGoogleGeminiRoutes } from './src/server/google-gemini-routes.js'
 import {
   registerAuthAndIntegrationRoutes,
   registerPlatformProxyRoutes,
   registerStaticRoutes,
   resolveAuth,
 } from './src/server/http-routes.js'
+import { registerMapRoutes } from './src/server/map-routes.js'
 import { registerRealtimeRoutes } from './src/server/realtime-routes.js'
 
 // Dynamic deploy reads this manifest to create the app's DO bindings.
@@ -118,6 +120,11 @@ export interface Env extends DOBindings<typeof __DO_MANIFEST__> {
    * an authenticated app owner/admin. deepspace dev/test set it locally.
    */
   ALLOW_DEBUG_ROUTES?: string
+  /** Optional CartoDB basemaps API key stored via `npx deepspace secrets set CARTO_API_KEY=...`. */
+  CARTO_API_KEY?: string
+  /** Optional Google OAuth client credentials for per-user Gemini OAuth linking. */
+  GOOGLE_OAUTH_CLIENT_ID?: string
+  GOOGLE_OAUTH_CLIENT_SECRET?: string
 }
 
 export type AppContext = { Bindings: Env }
@@ -135,6 +142,8 @@ app.use('*', async (c, next) => {
 // Registration order is part of the worker contract. The wildcard auth route
 // follows its special cases, AI precedes platform proxies, and static is last.
 registerAuthAndIntegrationRoutes(app)
+registerMapRoutes(app)
+registerGoogleGeminiRoutes(app)
 registerRealtimeRoutes(app)
 registerActionRoutes(app, resolveAuth)
 // Every scaffold exposes selected tools through HTTP, MCP and browser tools.

@@ -160,7 +160,7 @@ export default function NewTripPage() {
 
   return (
     <div className="min-h-full px-5 py-6 text-foreground md:px-8 md:py-10">
-      <div className="mx-auto max-w-3xl space-y-6">
+      <div className="mx-auto max-w-5xl space-y-6">
         <div>
           <p className="font-mono text-xs uppercase tracking-widest text-primary">New Atlas</p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight md:text-3xl">Create a Vacation Plan</h1>
@@ -223,7 +223,7 @@ export default function NewTripPage() {
             {titleError && <p className="mt-1 text-xs text-destructive">{titleError}</p>}
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="trip-days">
                 {mode === 'overview' ? 'Total timeframe (days)' : 'Est. days'}
@@ -255,7 +255,7 @@ export default function NewTripPage() {
                 onValueChange={(v) => v && setPace(v as TripPace)}
                 items={PACE_ITEMS}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full" data-testid="new-trip-pace-trigger">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -354,45 +354,27 @@ export default function NewTripPage() {
             {destinations.map((dest, idx) => (
               <div
                 key={dest.id}
-                className="grid items-end gap-2 rounded-lg border border-border bg-muted/30 p-3 sm:grid-cols-12"
+                className="space-y-3 rounded-lg border border-border bg-muted/30 p-3.5"
               >
-                <div className={mode === 'detailed' ? 'sm:col-span-4' : 'sm:col-span-6'}>
-                  <Label>City / Region #{idx + 1}</Label>
-                  <Input
-                    value={dest.name}
-                    onChange={(e) => updateDest(dest.id, { name: e.target.value })}
-                    placeholder="e.g. Lisbon"
-                  />
-                </div>
-                <div className={mode === 'detailed' ? 'sm:col-span-3' : 'sm:col-span-5'}>
-                  <Label>Country</Label>
-                  <Input
-                    value={dest.country}
-                    onChange={(e) => updateDest(dest.id, { country: e.target.value })}
-                    placeholder="Portugal"
-                  />
-                </div>
-                {mode === 'detailed' && (
-                  <>
-                    <div className="sm:col-span-2">
-                      <Label>Arrive</Label>
+                <div className="flex items-end gap-3">
+                  <div className="grid flex-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <Label>City / Region #{idx + 1}</Label>
                       <Input
-                        type="date"
-                        value={dest.arrivalDate}
-                        onChange={(e) => updateDest(dest.id, { arrivalDate: e.target.value })}
+                        value={dest.name}
+                        onChange={(e) => updateDest(dest.id, { name: e.target.value })}
+                        placeholder="e.g. Lisbon"
                       />
                     </div>
-                    <div className="sm:col-span-2">
-                      <Label>Depart</Label>
+                    <div>
+                      <Label>Country</Label>
                       <Input
-                        type="date"
-                        value={dest.departureDate}
-                        onChange={(e) => updateDest(dest.id, { departureDate: e.target.value })}
+                        value={dest.country}
+                        onChange={(e) => updateDest(dest.id, { country: e.target.value })}
+                        placeholder="Portugal"
                       />
                     </div>
-                  </>
-                )}
-                <div className="flex justify-end sm:col-span-1">
+                  </div>
                   <Button
                     size="icon"
                     variant="ghost"
@@ -403,6 +385,27 @@ export default function NewTripPage() {
                     <Trash2 className="size-3.5 text-muted-foreground" />
                   </Button>
                 </div>
+
+                {mode === 'detailed' && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <Label>Arrive</Label>
+                      <Input
+                        type="date"
+                        value={dest.arrivalDate}
+                        onChange={(e) => updateDest(dest.id, { arrivalDate: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label>Depart</Label>
+                      <Input
+                        type="date"
+                        value={dest.departureDate}
+                        onChange={(e) => updateDest(dest.id, { departureDate: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

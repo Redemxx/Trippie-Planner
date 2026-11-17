@@ -237,6 +237,9 @@
     background-color: var(--color-card) !important;
     font-family: inherit !important;
   }
+  .trippie-osm-dark .leaflet-tile-pane {
+    filter: invert(100%) hue-rotate(180deg) brightness(92%) contrast(90%) saturate(70%);
+  }
   .leaflet-bar a {
     background-color: var(--color-card) !important;
     color: var(--color-foreground) !important;
