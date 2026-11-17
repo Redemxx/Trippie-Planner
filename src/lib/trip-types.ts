@@ -27,7 +27,7 @@ export type LightWindow = 'any' | 'sunrise' | 'golden_hour' | 'blue_hour' | 'mid
 
 export type TripAccessRole = 'owner' | 'editor' | 'viewer'
 
-export interface TripData {
+export type TripData = {
   title: string
   ownerId: string
   teamId: string
@@ -47,7 +47,7 @@ export interface TripData {
   summaryNotes?: string
 }
 
-export interface WeatherForecastSummary {
+export type WeatherForecastSummary = {
   fetchedAt: string
   tempC: number
   description: string
@@ -61,7 +61,7 @@ export interface WeatherForecastSummary {
   }>
 }
 
-export interface DestinationData {
+export type DestinationData = {
   tripId: string
   ownerId?: string
   editors?: string[]
@@ -80,7 +80,7 @@ export interface DestinationData {
   notes?: string
 }
 
-export interface StopData {
+export type StopData = {
   tripId: string
   destinationId?: string
   ownerId?: string
@@ -107,7 +107,7 @@ export interface StopData {
   sourceUrl?: string
 }
 
-export interface OverviewAllocation {
+export type OverviewAllocation = {
   destinationName: string
   country?: string
   lat?: number
@@ -122,7 +122,7 @@ export interface OverviewAllocation {
   dayTripIdeas: string[]
 }
 
-export interface OverviewDayBlock {
+export type OverviewDayBlock = {
   dayNumber: number
   location: string
   theme: string
@@ -132,7 +132,7 @@ export interface OverviewDayBlock {
   photoMoment?: string
 }
 
-export interface OverviewData {
+export type OverviewData = {
   tripId: string
   ownerId?: string
   editors?: string[]
@@ -144,7 +144,7 @@ export interface OverviewData {
   dailyOutline: OverviewDayBlock[]
 }
 
-export interface ChecklistData {
+export type ChecklistData = {
   tripId: string
   ownerId?: string
   editors?: string[]
@@ -154,7 +154,7 @@ export interface ChecklistData {
   assignedTo?: string
 }
 
-export interface TeamMemberData {
+export type TeamMemberData = {
   teamId: string
   userId: string
   role: TripAccessRole
@@ -164,7 +164,7 @@ export interface TeamMemberData {
   addedBy?: string
 }
 
-export interface TripInviteData {
+export type TripInviteData = {
   tripId: string
   ownerId?: string
   token: string

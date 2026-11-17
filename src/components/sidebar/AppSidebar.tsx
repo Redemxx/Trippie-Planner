@@ -24,11 +24,13 @@ import { AuthOverlay, useAuthProfileReady, signOut } from 'deepspace'
 import {
   Box,
   ChevronDown,
-  Home,
+  Compass,
   LogIn,
   LogOut,
+  Map,
   Menu,
   PanelLeftClose,
+  PlusCircle,
   Settings,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -54,7 +56,9 @@ import {
 
 /** Icon per nav route; keeps nav.ts as plain data (feature-added entries get the fallback). */
 const NAV_ICONS: Record<string, LucideIcon> = {
-  '/home': Home,
+  '/home': Compass,
+  '/overview': Map,
+  '/trips/new': PlusCircle,
   '/settings': Settings,
 }
 
@@ -177,7 +181,7 @@ export function AppSidebar({ mobileOpen, onMobileClose }: AppSidebarProps) {
               className="flex min-w-0 items-center gap-[10px] rounded-md px-[2px]"
             >
               <span className="flex size-[26px] flex-none items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground">
-                {APP_NAME.charAt(0).toUpperCase()}
+                <Compass className="size-3.5" aria-hidden />
               </span>
               <span
                 className="truncate text-sm font-semibold text-foreground transition-opacity duration-150"

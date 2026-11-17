@@ -16,12 +16,13 @@
  * signed-out visitors get a sign-in prompt instead of the panel.
  */
 
-import { useEffect, useState } from 'react'
-import { PanelRightClose, PanelRightOpen, Plus } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Compass, PanelRightClose, PanelRightOpen, Plus } from 'lucide-react'
 import { useAuth, AuthOverlay } from 'deepspace'
 import { ChatPanel } from '../chat/ChatPanel'
-import { Button } from '../ui'
+import { Badge, Button } from '../ui'
 import { cn } from '../../lib/utils'
+import { useTripChat } from '../../contexts/TripChatContext'
 
 const CHAT_WIDTH = 360
 const OPEN_KEY = 'chat-open'
@@ -56,10 +57,42 @@ function useIsDesktop(): boolean {
 export function ChatDock() {
   const { isSignedIn, userId } = useAuth()
   const isDesktop = useIsDesktop()
+  const tripChat = useTripChat()
 
   const [open, setOpen] = useState(readInitialOpen)
   const [chatId, setChatId] = useState<string | null>(null)
   const [showAuthModal, setShowAuthModal] = useState(false)
+
+  useEffect(() => {
+    if (tripChat?.openDockSignal) {
+      setOpen(true)
+    }
+  }, [tripChat?.openDockSignal])
+
+  const tripContext = useMemo(
+    () =>
+      tripChat?.tripId
+        ? { tripId: tripChat.tripId, dayNumber: tripChat.dayNumber ?? undefined }
+        : undefined,
+    [tripChat?.tripId, tripChat?.dayNumber],
+  )
+
+  const travelPrompts = useMemo(() => {
+    if (tripChat?.tripTitle) {
+      const dayLabel = tripChat.dayNumber ? `Day ${tripChat.dayNumber}` : 'this trip'
+      return [
+        `Add a golden-hour photo spot to ${dayLabel}`,
+        `Optimize ${dayLabel} to minimize travel time`,
+        `Recommend local restaurants near our stops on ${dayLabel}`,
+        `Suggest a scenic day trip or hidden gem`,
+      ]
+    }
+    return [
+      'Plan a 5-day Kyoto & Osaka food and photography trip',
+      'Compare 7 days in Lisbon & Porto vs adding Seville',
+      'What golden-hour spots should I prioritize in Iceland?',
+    ]
+  }, [tripChat?.tripTitle, tripChat?.dayNumber])
 
   // A chat id must never survive an account switch: the next user's first
   // send would 404 against a chat they can't read.
@@ -89,8 +122,17 @@ export function ChatDock() {
   // pr-12 keeps the title and new-chat clear of the fixed corner toggle.
   const chat = (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex h-11 flex-none items-center gap-1 pl-3 pr-12">
-        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">Assistant</span>
+      <div className="flex h-11 flex-none items-center gap-1.5 pl-3 pr-12">
+        <Compass className="size-3.5 shrink-0 text-primary" aria-hidden />
+        <span className="min-w-0 truncate text-sm font-medium text-foreground">
+          AI Concierge
+        </span>
+        {tripChat?.tripTitle && (
+          <Badge variant="secondary" className="max-w-[130px] truncate text-[10px]">
+            {tripChat.tripTitle}
+          </Badge>
+        )}
+        <div className="flex-1" />
         {isSignedIn && userId && (
           <button
             type="button"
@@ -111,6 +153,10 @@ export function ChatDock() {
           chatId={chatId}
           userId={userId}
           onChatCreated={setChatId}
+          emptyStatePrompts={travelPrompts}
+          tripContext={tripContext}
+          queuedPrompt={tripChat?.queuedPrompt}
+          onQueuedPromptConsumed={tripChat?.clearQueuedPrompt}
           className="min-h-0 flex-1 !bg-transparent"
           compact
         />

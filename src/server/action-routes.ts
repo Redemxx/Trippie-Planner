@@ -65,6 +65,9 @@ export function registerActionRoutes(app: Hono<AppContext>, resolveAuth: Resolve
     const params = await c.req.json<Record<string, unknown>>()
     const tools = createActionTools(c.env, auth.userId, callerJwt)
     const result = await action({ userId: auth.userId, params, tools, env: c.env, callerJwt })
+    if (!result.success && typeof result.status === 'number' && result.status >= 400 && result.status <= 599) {
+      return c.json(result as unknown as Record<string, unknown>, result.status as 400)
+    }
     return c.json(result as unknown as Record<string, unknown>)
   })
 }

@@ -66,6 +66,12 @@ export type ChatPanelProps = {
   compact?: boolean
   /** Suspends send while a parent-owned create is in flight. */
   disabled?: boolean
+  /** Active trip context passed to the AI travel concierge. */
+  tripContext?: { tripId?: string; dayNumber?: number }
+  /** Queued prompt from workspace action buttons. */
+  queuedPrompt?: { id: string; text: string } | null
+  /** Called after queued prompt is placed in composer or sent. */
+  onQueuedPromptConsumed?: () => void
 }
 
 const MODEL_STORAGE_KEY = 'deepspace-ai-model'
@@ -91,6 +97,9 @@ export function ChatPanel({
   header,
   compact = false,
   disabled = false,
+  tripContext,
+  queuedPrompt,
+  onQueuedPromptConsumed,
 }: ChatPanelProps) {
   const models = modelOptions ?? DEFAULT_MODELS
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -134,8 +143,16 @@ export function ChatPanel({
   const { send, stop, retry, isLoading, error, inFlight } = useStreamingChat({
     chatId: activeChatId,
     modelId,
+    tripContext,
     onChatCreated: handleChatCreated,
   })
+
+  useEffect(() => {
+    if (!queuedPrompt) return
+    setInput(queuedPrompt.text)
+    onQueuedPromptConsumed?.()
+    inputRef.current?.focus()
+  }, [queuedPrompt, onQueuedPromptConsumed])
 
   const queryWhere = useMemo(
     () => ({ chatId: activeChatId ?? '__none__', userId }),

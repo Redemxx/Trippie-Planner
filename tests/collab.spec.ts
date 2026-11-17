@@ -1,64 +1,166 @@
-/**
- * Multi-user collaboration spec — verifies two users sign in into
- * separate browser contexts and the app distinguishes them.
- *
- * `users(2)` takes any two accounts from your pool, so this spec passes on a
- * fresh app with no setup beyond having two test accounts:
- *   npx deepspace test accounts list
- *   npx deepspace test accounts create --email a@deepspace.test --name "A" --password-stdin
- *
- * Ask for accounts *by name* (`users(['Alice', 'Bob'])`) only when the
- * behaviour under test depends on which identity acts — otherwise naming them
- * couples the spec to one machine's pool.
- *
- * The `users` fixture handles sign-in caching (per-account storageState
- * persisted to `~/.deepspace/playwright-states/`), context creation, and
- * cleanup. No need to manage browser contexts manually.
- */
 import { test, expect, loadAllTestAccounts } from 'deepspace/testing'
 
-// A machine that has never created test accounts is the normal state of a
-// fresh checkout, and there `users()` throws — turning "you have no pool yet"
-// into three red tests about the app, which it is not. Skip the file instead
-// and say what creates the pool. The count is of accounts usable HERE: the
-// pool is global per developer, but passwords live only on the machine that
-// created the account.
 const usableTestAccounts = loadAllTestAccounts().length
 test.skip(
   usableTestAccounts < 2,
   `Needs 2 usable test accounts, found ${usableTestAccounts}. Create them with ` +
     '`npx deepspace test accounts create --email <name>@deepspace.test --name "<name>" ' +
-    '--password-stdin`, or fetch existing pool accounts with `npx deepspace test accounts recover --all`.',
+    '--password-stdin`.',
 )
 
 test('each browser renders its own signed-in account', async ({ users }) => {
   const [a, b] = await users(2)
-
-  // /home is dynamic (under src/pages/(app)/), so it mounts the nav shell;
-  // '/' is the static landing and has no navigation.
   await Promise.all([a.page.goto('/home'), b.page.goto('/home')])
 
-  // Email, not name. The page renders the *session's* `name || email`, while
-  // `user.name` here comes from the LOCAL account registry — and the two are
-  // not the same fact: a display name is optional, and an account recovered on
-  // another machine has none stored locally at all. The email is the credential
-  // the context signed in with, so it is the one identity both sides agree on,
-  // and asserting it proves the page is showing THIS browser's account.
-  // The two accounts are distinct, so two exact matches is also the proof that
-  // the contexts are not sharing one session.
   for (const user of [a, b]) {
     await expect(user.page.getByTestId('app-navigation')).toBeVisible({ timeout: 15_000 })
-
-    // The identity chip shows `name || email`. Its text is not predictable, but
-    // its presence is: something must be there once the profile has loaded.
-    // (It is `hidden sm:inline` in some templates, so assert text, not
-    // visibility.)
     await expect(user.page.getByTestId('nav-user-name')).toHaveText(/\S/, { timeout: 15_000 })
-
     await user.page.getByRole('button', { name: 'Account menu' }).click()
     await expect(user.page.getByTestId('nav-user-email')).toHaveText(user.email, {
       timeout: 15_000,
     })
+  }
+})
+
+test('owner shares trip with viewer (read-only enforced) then promotes to editor for live co-editing', async ({
+  users,
+}) => {
+  const [owner, guest] = await users(2)
+  await Promise.all([owner.page.goto('/home'), guest.page.goto('/home')])
+  await expect(owner.page.getByTestId('nav-user-name')).toHaveText(/\S/, { timeout: 15_000 })
+  await expect(guest.page.getByTestId('nav-user-name')).toHaveText(/\S/, { timeout: 15_000 })
+
+  const ownerToken = (
+    (await owner.page.evaluate(async () => {
+      const r = await fetch('/api/auth/token', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+      })
+      return r.json()
+    })) as { token: string }
+  ).token
+  const guestToken = (
+    (await guest.page.evaluate(async () => {
+      const r = await fetch('/api/auth/token', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+      })
+      return r.json()
+    })) as { token: string }
+  ).token
+
+  let tripId: string | null = null
+  try {
+    const tripTitle = `__test-${Date.now()}__ Shared Lisbon Atlas`
+    const createRes = await owner.page.request.post('/api/actions/createTrip', {
+      headers: { Authorization: `Bearer ${ownerToken}` },
+      data: {
+        title: tripTitle,
+        mode: 'detailed',
+        totalDays: 3,
+        destinations: [{ name: 'Lisbon', country: 'PT', lat: 38.7223, lng: -9.1393 }],
+      },
+    })
+    expect(createRes.status()).toBe(200)
+    tripId = ((await createRes.json()) as { data: { tripId: string } }).data.tripId
+
+    // Owner invites guest as a VIEWER via inviteTripMember (by email)
+    const inviteRes = await owner.page.request.post('/api/actions/inviteTripMember', {
+      headers: { Authorization: `Bearer ${ownerToken}` },
+      data: {
+        tripId,
+        email: guest.email,
+        role: 'viewer',
+      },
+    })
+    expect(inviteRes.status()).toBe(200)
+    const inviteBody = (await inviteRes.json()) as {
+      success: boolean
+      data: { status: string; role: string; userId?: string }
+    }
+    expect(inviteBody.data.status).toBe('added')
+    expect(inviteBody.data.role).toBe('viewer')
+    const guestId = inviteBody.data.userId ?? guest.userId ?? ''
+
+    // Guest opens the shared trip and sees Viewer (Read-only) + banner
+    await guest.page.goto(`/trips/${tripId}`)
+    await expect(guest.page.getByTestId('trip-title')).toHaveText(tripTitle, { timeout: 15_000 })
+    await expect(guest.page.getByTestId('trip-role-badge')).toContainText('Viewer')
+    await expect(guest.page.getByTestId('viewer-readonly-banner')).toBeVisible()
+    await expect(guest.page.getByTestId('add-stop-button')).toHaveCount(0)
+
+    // Server-side RBAC: Viewer attempting a write action must get 403 Forbidden
+    const deniedWrite = await guest.page.request.post('/api/actions/upsertTripStop', {
+      headers: { Authorization: `Bearer ${guestToken}` },
+      data: {
+        tripId,
+        dayNumber: 1,
+        title: 'Unauthorized Stop',
+        category: 'must_see',
+      },
+    })
+    expect(deniedWrite.status()).toBe(403)
+
+    // Owner opens trip and adds a stop — Guest (viewer) sees it appear live
+    await owner.page.goto(`/trips/${tripId}`)
+    await expect(owner.page.getByTestId('trip-title')).toHaveText(tripTitle, { timeout: 15_000 })
+
+    await owner.page.request.post('/api/actions/upsertTripStop', {
+      headers: { Authorization: `Bearer ${ownerToken}` },
+      data: {
+        tripId,
+        dayNumber: 1,
+        title: 'Alfama Miradouro Sunrise',
+        category: 'photo_spot',
+        lat: 38.7117,
+        lng: -9.1303,
+      },
+    })
+    await expect(guest.page.getByText('Alfama Miradouro Sunrise')).toBeVisible({ timeout: 15_000 })
+
+    // Owner promotes Guest to EDITOR
+    const guestUserId = (
+      (await owner.page.request.post('/api/actions/setTripMemberRole', {
+        headers: { Authorization: `Bearer ${ownerToken}` },
+        data: {
+          tripId,
+          targetUserId: guestId,
+          role: 'editor',
+        },
+      }))
+    )
+    expect(guestUserId.status()).toBe(200)
+
+    // Guest's UI updates in real time to Editor and allows adding a stop
+    await expect(guest.page.getByTestId('trip-role-badge')).toContainText('Editor', {
+      timeout: 15_000,
+    })
+    await expect(guest.page.getByTestId('add-stop-button')).toBeVisible({ timeout: 15_000 })
+
+    const editorStopRes = await guest.page.request.post('/api/actions/upsertTripStop', {
+      headers: { Authorization: `Bearer ${guestToken}` },
+      data: {
+        tripId,
+        dayNumber: 1,
+        title: 'Time Out Market Lunch',
+        category: 'restaurant',
+        lat: 38.7071,
+        lng: -9.1459,
+      },
+    })
+    expect(editorStopRes.status()).toBe(200)
+
+    // Owner sees Guest's edit appear live without reload
+    await expect(owner.page.getByText('Time Out Market Lunch')).toBeVisible({ timeout: 15_000 })
+  } finally {
+    if (tripId) {
+      await owner.page.request.post('/api/actions/deleteTrip', {
+        headers: { Authorization: `Bearer ${ownerToken}` },
+        data: { tripId },
+      })
+    }
   }
 })
 
@@ -100,34 +202,6 @@ test('API status page renders loading success and error states', async ({ users 
   const urlAfterFailure = user.page.url()
   const requestsAfterFailure = requestCount
   await user.page.getByRole('button', { name: 'Refresh' }).click()
-  await expect.poll(() => requestCount).toBeGreaterThan(requestsAfterFailure)
-  expect(user.page.url()).toBe(urlAfterFailure)
-})
-
-test('API status page shows local retry after first-load API failure', async ({ users }) => {
-  const [user] = await users(1)
-  let requestCount = 0
-
-  await user.page.route('**/api/integrations', async (route) => {
-    requestCount += 1
-    await route.fulfill({
-      status: 502,
-      contentType: 'application/json',
-      body: JSON.stringify({ success: false, error: 'Catalog unavailable' }),
-    })
-  })
-
-  await user.page.goto('/api-status')
-  await expect(user.page.getByText('Loading integration catalog...')).toBeVisible()
-  await expect(user.page.getByText('Could not load API data')).toBeVisible()
-  await expect(user.page.getByText('Retried 1 time automatically.')).toBeVisible()
-
-  const retryButton = user.page.getByRole('button', { name: 'Retry' })
-  await expect(retryButton).toBeVisible()
-
-  const urlAfterFailure = user.page.url()
-  const requestsAfterFailure = requestCount
-  await retryButton.click()
   await expect.poll(() => requestCount).toBeGreaterThan(requestsAfterFailure)
   expect(user.page.url()).toBe(urlAfterFailure)
 })

@@ -1,4 +1,49 @@
 import type { ActionHandler } from 'deepspace/worker'
-import type { Env } from '../../worker'
+import type { Env } from '../../worker.js'
+import {
+  acceptTripInvite,
+  addChecklistItem,
+  addDestination,
+  cloneSampleTrip,
+  createTrip,
+  createTripInviteLink,
+  deleteTrip,
+  generateOverviewBlueprint,
+  inviteTripMember,
+  moveTripStop,
+  optimizeTripDay,
+  promoteOverviewToDetailed,
+  refreshDestinationWeather,
+  removeChecklistItem,
+  removeDestination,
+  removeTripMember,
+  removeTripStop,
+  setTripMemberRole,
+  toggleChecklistItem,
+  updateTripDetails,
+  upsertTripStop,
+} from './trip-actions.js'
 
-export const actions: Record<string, ActionHandler<Env>> = {}
+export const actions: Record<string, ActionHandler<Env>> = {
+  createTrip,
+  cloneSampleTrip,
+  updateTripDetails,
+  deleteTrip,
+  addDestination,
+  removeDestination,
+  upsertTripStop,
+  removeTripStop,
+  moveTripStop,
+  optimizeTripDay,
+  generateOverviewBlueprint,
+  promoteOverviewToDetailed,
+  refreshDestinationWeather,
+  toggleChecklistItem,
+  addChecklistItem,
+  removeChecklistItem,
+  inviteTripMember,
+  createTripInviteLink,
+  acceptTripInvite,
+  setTripMemberRole,
+  removeTripMember,
+}

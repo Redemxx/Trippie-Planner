@@ -22,6 +22,7 @@ import { DeepSpaceAuthProvider, useAuthStatus } from 'deepspace'
 import { RecordProvider, RecordScope, AgentTools } from 'deepspace'
 import { AppSidebar, SidebarMobileHeader } from '../../components/sidebar/AppSidebar'
 import { ChatDock } from '../../components/shell/ChatDock'
+import { TripChatProvider } from '../../contexts/TripChatContext'
 import { useToast } from '@/components/ui'
 import { APP_NAME, SCOPE_ID } from '../../constants'
 import { schemas } from '../../schemas'
@@ -36,28 +37,30 @@ export default function AppLayout() {
           when <Seo> unmounts, so every route without <Seo> sets its own. */}
       <title>{APP_NAME}</title>
       <AuthBoot>
-        <div className="flex h-screen overflow-hidden bg-shell">
-          <AppSidebar mobileOpen={mobileNavOpen} onMobileClose={closeMobileNav} />
-          <div className="flex min-w-0 flex-1 flex-col">
-            <SidebarMobileHeader onOpenMenu={() => setMobileNavOpen(true)} />
-            <div className="flex min-h-0 flex-1">
-              {/* The main panel — the raised rectangle every (app) page renders into. */}
-              <main className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-shell-panel md:my-2 md:mr-2 md:rounded-xl md:border md:border-border md:shadow-[var(--shadow-card)]">
-                <Suspense
-                  fallback={
-                    <div className="flex h-full items-center justify-center text-muted-foreground">
-                      Loading...
-                    </div>
-                  }
-                >
-                  <Outlet />
-                </Suspense>
-              </main>
-              {/* The AI chat — a sibling of <main>, on the shell, outside the panel. */}
-              <ChatDock />
+        <TripChatProvider>
+          <div className="flex h-screen overflow-hidden bg-shell">
+            <AppSidebar mobileOpen={mobileNavOpen} onMobileClose={closeMobileNav} />
+            <div className="flex min-w-0 flex-1 flex-col">
+              <SidebarMobileHeader onOpenMenu={() => setMobileNavOpen(true)} />
+              <div className="flex min-h-0 flex-1">
+                {/* The main panel — the raised rectangle every (app) page renders into. */}
+                <main className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-shell-panel md:my-2 md:mr-2 md:rounded-xl md:border md:border-border md:shadow-[var(--shadow-card)]">
+                  <Suspense
+                    fallback={
+                      <div className="flex h-full items-center justify-center text-muted-foreground">
+                        Loading...
+                      </div>
+                    }
+                  >
+                    <Outlet />
+                  </Suspense>
+                </main>
+                {/* The AI chat — a sibling of <main>, on the shell, outside the panel. */}
+                <ChatDock />
+              </div>
             </div>
           </div>
-        </div>
+        </TripChatProvider>
       </AuthBoot>
     </DeepSpaceAuthProvider>
   )

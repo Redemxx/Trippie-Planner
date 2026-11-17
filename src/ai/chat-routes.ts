@@ -36,6 +36,8 @@ import {
 import type { AgentToolAccessResult, AgentToolRouteOptions, ChatTurn } from 'deepspace/worker'
 import { schemas } from '../schemas.js'
 import { buildSystemPrompt } from './tools.js'
+import { assertTripAccess, createServerRecordTools } from '../server/trip-helpers.js'
+import type { DestinationData } from '../lib/trip-types.js'
 // Type-only — TypeScript strips these at runtime, so no circular import
 // with worker.ts (which imports `registerAiChatRoutes` from this file).
 import type { Env, AppContext } from '../../worker.js'
@@ -151,11 +153,12 @@ export function registerAiChatRoutes(
     const jwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
     if (!jwt) return c.json({ error: 'Unauthorized' }, 401)
 
-    const { chatId, userMessageId, content, modelId } = await c.req.json<{
+    const { chatId, userMessageId, content, modelId, tripContext } = await c.req.json<{
       chatId?: string
       userMessageId?: string
       content?: string
       modelId?: string
+      tripContext?: { tripId?: string; dayNumber?: number }
     }>()
     if (typeof chatId !== 'string' || !chatId) return c.json({ error: 'chatId is required' }, 400)
     if (typeof userMessageId !== 'string' || !userMessageId)
@@ -241,6 +244,39 @@ export function registerAiChatRoutes(
       modelId: usedModelId,
     }
     const baseSystem = buildSystemPrompt(c.env.APP_NAME, schemas)
+    let workspaceContextBlock = ''
+    if (tripContext && typeof tripContext.tripId === 'string' && tripContext.tripId) {
+      const serverTools = createServerRecordTools(c.env, auth.userId, jwt)
+      const access = await assertTripAccess(serverTools, tripContext.tripId, auth.userId, 'viewer')
+      if (access.ok) {
+        const destRes = await serverTools.query<DestinationData>('trip_destinations', {
+          where: { tripId: access.trip.recordId },
+          limit: 30,
+        })
+        const destNames = destRes.success
+          ? destRes.data.records
+              .slice()
+              .sort((a, b) => (a.data.orderIndex ?? 0) - (b.data.orderIndex ?? 0))
+              .map((d) => d.data.name)
+              .join(' -> ')
+          : ''
+        workspaceContextBlock = [
+          '\n\nActive Trip Workspace Context:',
+          `- tripId: ${access.trip.recordId}`,
+          `- title: ${access.trip.data.title}`,
+          `- mode: ${access.trip.data.mode}`,
+          `- callerAccessRole: ${access.role}`,
+          ...(typeof tripContext.dayNumber === 'number'
+            ? [`- activeDayNumber: ${tripContext.dayNumber}`]
+            : []),
+          ...(destNames ? [`- destinations: ${destNames}`] : []),
+          `- pace: ${access.trip.data.pace ?? 'balanced'}`,
+          ...(access.trip.data.interests?.length
+            ? [`- interests: ${access.trip.data.interests.join(', ')}`]
+            : []),
+        ].join('\n')
+      }
+    }
 
     // Compaction inserts at most one summary system message at index 0; fold
     // it into the top-level `system` so we don't pass two system roles. Then
@@ -248,7 +284,9 @@ export function registerAiChatRoutes(
     // assistant rows into the assistant + paired tool messages the SDK expects.
     const [first, ...rest] = prepared
     const summary = first?.role === 'system' ? first : null
-    const systemText = summary ? `${baseSystem}\n\n${summary.content}` : baseSystem
+    const systemText = summary
+      ? `${baseSystem}${workspaceContextBlock}\n\n${summary.content}`
+      : `${baseSystem}${workspaceContextBlock}`
     const messages = turnsToCoreMessages(summary ? rest : prepared)
 
     // The SDK executor runs each tool as the verified user, in the room the

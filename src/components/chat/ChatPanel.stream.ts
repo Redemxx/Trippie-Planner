@@ -44,6 +44,7 @@ export type InFlightMessage = {
 type UseStreamingChatOptions = {
   chatId: string | null
   modelId?: string
+  tripContext?: { tripId?: string; dayNumber?: number }
   onChatCreated?: (id: string) => void
 }
 
@@ -174,6 +175,7 @@ function finalizeToolInvocation(
 export function useStreamingChat({
   chatId,
   modelId,
+  tripContext,
   onChatCreated,
 }: UseStreamingChatOptions) {
   const [inFlight, setInFlight] = useState<InFlightMessage[]>([])
@@ -249,6 +251,7 @@ export function useStreamingChat({
             userMessageId,
             content,
             modelId,
+            ...(tripContext?.tripId ? { tripContext } : {}),
           }),
           signal: controller.signal,
         })
@@ -295,7 +298,7 @@ export function useStreamingChat({
         setIsLoading(false)
       }
     },
-    [chatId, modelId, onChatCreated],
+    [chatId, modelId, onChatCreated, tripContext],
   )
 
   const stop = useCallback(() => {
