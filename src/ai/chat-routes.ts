@@ -51,7 +51,16 @@ import {
   getUserGeminiCredential,
   isGeminiModelId,
 } from '../server/google-gemini-routes.js'
-import type { DestinationData } from '../lib/trip-types.js'
+import type { DestinationData, StopData } from '../lib/trip-types.js'
+import {
+  formatMinutesToTime,
+  hasCoords,
+  isIntercityLegCard,
+  parseTimeToMinutes,
+  resolveActiveDayHotels,
+  resolveDayContext,
+  resolveEffectiveTripStartDate,
+} from '../lib/route-optimizer.js'
 // Type-only — TypeScript strips these at runtime, so no circular import
 // with worker.ts (which imports `registerAiChatRoutes` from this file).
 import type { Env, AppContext } from '../../worker.js'
@@ -108,7 +117,8 @@ export function registerAiChatRoutes(
     if (access instanceof Response) return access
     const { auth } = access
 
-    const body = await c.req.json<{ title?: string }>().catch(() => ({}) as { title?: string })
+    const raw = await c.req.json<unknown>().catch(() => null)
+    const body = (raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as { title?: string }
     const stub = recordRoomStub(c.env)
     const chat = await createChat(stub, auth.userId, {
       title: body.title ?? 'New chat',
@@ -127,7 +137,8 @@ export function registerAiChatRoutes(
     const chat = await getChat(stub, id, auth.userId)
     if (!chat) return c.json({ error: 'Not found' }, 404)
 
-    const body = await c.req.json<{ title?: string }>().catch(() => ({}) as { title?: string })
+    const raw = await c.req.json<unknown>().catch(() => null)
+    const body = (raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as { title?: string }
     const patch: { title?: string } = {}
     if (typeof body.title === 'string') patch.title = body.title
     // `updateChat` re-checks the chat; a delete racing this PATCH answers 404
@@ -167,13 +178,22 @@ export function registerAiChatRoutes(
     const jwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
     if (!jwt) return c.json({ error: 'Unauthorized' }, 401)
 
-    const { chatId, userMessageId, content, modelId, tripContext } = await c.req.json<{
+    let rawBody: unknown
+    try {
+      rawBody = await c.req.json<unknown>()
+    } catch {
+      return c.json({ error: 'Invalid JSON request body' }, 400)
+    }
+    if (rawBody === null || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
+      return c.json({ error: 'Request body must be a JSON object' }, 400)
+    }
+    const { chatId, userMessageId, content, modelId, tripContext } = rawBody as {
       chatId?: string
       userMessageId?: string
       content?: string
       modelId?: string
       tripContext?: { tripId?: string; dayNumber?: number }
-    }>()
+    }
     if (typeof chatId !== 'string' || !chatId) return c.json({ error: 'chatId is required' }, 400)
     if (typeof userMessageId !== 'string' || !userMessageId)
       return c.json({ error: 'userMessageId is required' }, 400)
@@ -293,31 +313,116 @@ export function registerAiChatRoutes(
       const serverTools = createServerRecordTools(c.env, auth.userId, jwt)
       const access = await assertTripAccess(serverTools, tripContext.tripId, auth.userId, 'viewer')
       if (access.ok) {
-        const destRes = await serverTools.query<DestinationData>('trip_destinations', {
-          where: { tripId: access.trip.recordId },
-          limit: 30,
-        })
-        const destNames = destRes.success
+        const activeDayNum = typeof tripContext.dayNumber === 'number' ? tripContext.dayNumber : undefined
+        const [destRes, dayStopsRes] = await Promise.all([
+          serverTools.query<DestinationData>('trip_destinations', {
+            where: { tripId: access.trip.recordId },
+            limit: 30,
+          }),
+          activeDayNum
+            ? serverTools.query<StopData>('trip_stops', {
+                where: { tripId: access.trip.recordId, dayNumber: activeDayNum },
+                limit: 100,
+              })
+            : Promise.resolve(null),
+        ])
+        const sortedDests = destRes.success
           ? destRes.data.records
-              .slice()
-              .sort((a, b) => (a.data.orderIndex ?? 0) - (b.data.orderIndex ?? 0))
-              .map((d) => d.data.name)
-              .join(' -> ')
+              .map((d) => ({ id: d.recordId, ...d.data }))
+              .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0))
+          : []
+        const destSummary = sortedDests
+          .map((d) => {
+            const hotelCoords =
+              typeof d.lodgingLat === 'number' && typeof d.lodgingLng === 'number'
+                ? `${d.lodgingLat.toFixed(5)}, ${d.lodgingLng.toFixed(5)}`
+                : hasCoords(d)
+                  ? `${d.lat!.toFixed(5)}, ${d.lng!.toFixed(5)}`
+                  : 'unset'
+            const cityCoords = hasCoords(d) ? `${d.lat!.toFixed(5)}, ${d.lng!.toFixed(5)}` : 'unset'
+            const stayText =
+              d.lodgingName || d.lodgingAddress
+                ? ` (stay: ${d.lodgingName || 'lodging'}${d.lodgingAddress ? ` @ ${d.lodgingAddress}` : ''}, mapHotelPin: [${hotelCoords}], cityCenter: [${cityCoords}], in ${d.checkInTime || '15:00'}/out ${d.checkOutTime || '10:00'})`
+                : ` (cityCenter: [${cityCoords}])`
+            return `${d.name}${d.country ? `, ${d.country}` : ''}${d.arrivalDate || d.departureDate ? ` [${d.arrivalDate ?? '?'}..${d.departureDate ?? '?'}]` : ''}${stayText}`
+          })
+          .join(' -> ')
+        const effectiveStartDate = resolveEffectiveTripStartDate(access.trip.data.startDate, sortedDests)
+        const totalTripDays = access.trip.data.totalDays ?? 5
+        const activeDayCtx = activeDayNum
+          ? resolveDayContext(activeDayNum, totalTripDays, effectiveStartDate, sortedDests)
+          : null
+        const activeDayHotels = activeDayNum
+          ? resolveActiveDayHotels(activeDayNum, totalTripDays, effectiveStartDate, sortedDests)
+          : null
+        const activeDayHotelSummary = activeDayHotels
+          ? [
+              activeDayHotels.startHotel
+                ? `start/checkout="${activeDayHotels.startHotel.name}" @ (${activeDayHotels.startHotel.lat.toFixed(5)}, ${activeDayHotels.startHotel.lng.toFixed(5)})`
+                : null,
+              activeDayHotels.endHotel
+                ? `end/checkin="${activeDayHotels.endHotel.name}" @ (${activeDayHotels.endHotel.lat.toFixed(5)}, ${activeDayHotels.endHotel.lng.toFixed(5)})`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(' | ')
           : ''
+        const sortedDayStops =
+          dayStopsRes && dayStopsRes.success && dayStopsRes.data.records.length > 0
+            ? dayStopsRes.data.records
+                .slice()
+                .sort((a, b) => (a.data.orderIndex ?? 0) - (b.data.orderIndex ?? 0))
+            : []
+        const existingStopsSummary = sortedDayStops
+          .map((s) => {
+            const coordPart = hasCoords(s.data)
+              ? ` @ (${s.data.lat!.toFixed(5)}, ${s.data.lng!.toFixed(5)})`
+              : ' (no coords)'
+            const durPart =
+              typeof s.data.durationMinutes === 'number' ? ` (${s.data.durationMinutes}m)` : ''
+            return `  * [${s.recordId}] ${s.data.startTime || 'unscheduled'}${durPart} | ${s.data.category} | ${s.data.title}${coordPart}`
+          })
+          .join('\n')
+
+        let arrivalGapHint = ''
+        const travelCard = sortedDayStops.find((s) => isIntercityLegCard(s.data))
+        const checkInCard = sortedDayStops.find(
+          (s) => s.data.category === 'lodging' && /^\s*check\s*in\b/i.test(s.data.title),
+        )
+        if (travelCard && checkInCard) {
+          const travelStart = parseTimeToMinutes(travelCard.data.startTime)
+          const checkInStart = parseTimeToMinutes(checkInCard.data.startTime)
+          const travelDur = travelCard.data.durationMinutes ?? 60
+          if (travelStart !== null && checkInStart !== null) {
+            const arrivalMins = travelStart + travelDur
+            const gapMins = checkInStart - arrivalMins
+            if (gapMins >= 60) {
+              arrivalGapHint = `- arrivalToCheckInGap: ~${gapMins} min open between arrival (${formatMinutesToTime(arrivalMins)}) and check-in (${checkInCard.data.startTime}); consider scheduling hotel luggage drop-off + activities in between`
+            }
+          }
+        }
         workspaceContextBlock = [
           '\n\nActive Trip Workspace Context:',
           `- tripId: ${access.trip.recordId}`,
           `- title: ${access.trip.data.title}`,
           `- mode: ${access.trip.data.mode}`,
+          `- dates: ${effectiveStartDate ?? access.trip.data.startDate ?? 'unset'} -> ${access.trip.data.endDate ?? 'unset'} (${totalTripDays} days)`,
           `- callerAccessRole: ${access.role}`,
-          ...(typeof tripContext.dayNumber === 'number'
-            ? [`- activeDayNumber: ${tripContext.dayNumber}`]
+          ...(activeDayNum ? [`- activeDayNumber: ${activeDayNum}`] : []),
+          ...(activeDayCtx?.fullDateLabel ? [`- activeDayDate: ${activeDayCtx.fullDateLabel}`] : []),
+          ...(activeDayHotelSummary ? [`- activeDayMapHotelPins (authoritative H markers on map): ${activeDayHotelSummary}`] : []),
+          ...(activeDayCtx?.isLocationChange && activeDayCtx.previousDestination && activeDayCtx.destination
+            ? [
+                `- movingDay: ${activeDayCtx.previousDestination.name} -> ${activeDayCtx.destination.name} (preserve existing Check out, Travel:, and Check in cards)`,
+              ]
             : []),
-          ...(destNames ? [`- destinations: ${destNames}`] : []),
+          ...(arrivalGapHint ? [arrivalGapHint] : []),
+          ...(destSummary ? [`- destinations: ${destSummary}`] : []),
           `- pace: ${access.trip.data.pace ?? 'balanced'}`,
           ...(access.trip.data.interests?.length
             ? [`- interests: ${access.trip.data.interests.join(', ')}`]
             : []),
+          ...(existingStopsSummary ? [`- activeDayExistingStops:\n${existingStopsSummary}`] : []),
         ].join('\n')
       }
     }
@@ -463,7 +568,7 @@ export function registerAiChatRoutes(
         messages,
         tools,
         maxRetries: 0,
-        stopWhen: stepCountIs(21),
+        stopWhen: stepCountIs(101),
         abortSignal: c.req.raw.signal,
         onError: ({ error }) => {
           console.error(
@@ -485,6 +590,7 @@ export function registerAiChatRoutes(
       const { result } = streamDeepSpaceAgent(c.env, {
         profile: 'application',
         modelId: usedModelId,
+        maxToolCalls: 100,
         authToken: jwt,
         instructions: systemText,
         messages,

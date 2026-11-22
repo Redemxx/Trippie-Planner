@@ -1,12 +1,11 @@
-import type { DestinationData, OverviewData, StopData, TripData } from './trip-types'
+import type { DestinationData, StopData, TripData } from './trip-types'
 
 export function itineraryToMarkdown(params: {
   trip: TripData
   destinations: DestinationData[]
   stops: StopData[]
-  overview?: OverviewData | null
 }): string {
-  const { trip, destinations, stops, overview } = params
+  const { trip, destinations, stops } = params
   const lines: string[] = []
   lines.push(`# ${trip.title}`)
   lines.push('')
@@ -30,18 +29,6 @@ export function itineraryToMarkdown(params: {
       const dateStr =
         d.arrivalDate && d.departureDate ? ` (${d.arrivalDate} – ${d.departureDate})` : ''
       lines.push(`- **${d.name}**${d.country ? `, ${d.country}` : ''}${dateStr}`)
-    }
-    lines.push('')
-  }
-
-  if (overview && overview.allocations.length > 0) {
-    lines.push(`## Broad Overview (${overview.feasibilityStatus.toUpperCase()} · ${overview.feasibilityScore}/100)`)
-    lines.push(overview.summary)
-    lines.push('')
-    for (const alloc of overview.allocations) {
-      lines.push(
-        `- **${alloc.destinationName}**: ${alloc.recommendedDays} days recommended (min ${alloc.minDays}d) — ${alloc.rationale}`,
-      )
     }
     lines.push('')
   }

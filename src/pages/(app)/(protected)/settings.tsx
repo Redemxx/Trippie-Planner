@@ -96,7 +96,19 @@ export default function SettingsPage() {
       error('Sign in required', 'Please sign in first.')
       return
     }
-    window.location.href = `/api/ai/google/oauth/start?token=${encodeURIComponent(token)}`
+    try {
+      const res = await fetch('/api/ai/google/oauth/start', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const body = (await res.json().catch(() => ({}))) as { authUrl?: string; error?: string }
+      if (!res.ok || !body.authUrl) {
+        throw new Error(body.error || 'Could not initiate Google OAuth')
+      }
+      window.location.href = body.authUrl
+    } catch (err) {
+      error('Google OAuth failed', err instanceof Error ? err.message : 'Could not start OAuth')
+    }
   }
 
   async function handleSaveGeminiKey() {

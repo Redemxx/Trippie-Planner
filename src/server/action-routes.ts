@@ -62,7 +62,27 @@ export function registerActionRoutes(app: Hono<AppContext>, resolveAuth: Resolve
     // returns the handler argument, env secrets included, as the response.
     const action = lookupOwn(actions, name)
     if (!action) return c.json({ error: 'Action not found' }, 404)
-    const params = await c.req.json<Record<string, unknown>>()
+    let rawBody: unknown
+    try {
+      rawBody = await c.req.json<unknown>()
+    } catch {
+      return c.json(
+        { success: false, error: 'Invalid JSON request body', code: 'invalid_json', status: 400 },
+        400,
+      )
+    }
+    if (rawBody === null || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
+      return c.json(
+        {
+          success: false,
+          error: 'Request body must be a JSON object',
+          code: 'invalid_input',
+          status: 400,
+        },
+        400,
+      )
+    }
+    const params = rawBody as Record<string, unknown>
     const tools = createActionTools(c.env, auth.userId, callerJwt)
     const result = await action({ userId: auth.userId, params, tools, env: c.env, callerJwt })
     if (!result.success && typeof result.status === 'number' && result.status >= 400 && result.status <= 599) {

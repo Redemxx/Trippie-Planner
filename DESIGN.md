@@ -1,44 +1,30 @@
-# DESIGN.md — Trippie Editorial Web Contract
+# DESIGN.md — Trippie Editorial Design Contract
 
-This contract governs the public landing page (`/`) and any future public marketing surfaces for **Trippie**. The authenticated three-panel workspace (`/home`, `/overview`, `/trips/*`, `/settings`) keeps the existing shell and theme switcher (`atlas` / `cartographer`).
+This contract governs both the public landing page (`/`) and the collaborative workspace (`/home`, `/overview`, `/trips/*`, `/settings`) for **Trippie**.
 
 ## 1. Palette
 
-Neutrals carry the entire page frame; full colour and the brand accent appear strictly inside browser-framed product screenshots. All text/surface pairings meet WCAG AA and APCA Lc 75+.
+Neutrals carry the editorial frame; the `#ffc61a` brand accent appears inside product imagery and as the dark-mode focus/active accent. All text/surface pairings meet WCAG AA and APCA Lc 75+.
 
-| Token | Value | Role |
-|---|---|---|
-| Page ground | `#f5f4f0` | Primary alternating section background (Header, Logo Cloud, Features, Testimonials, Pricing, Footer) |
-| Alternate ground / Inset surface | `#ecebe8` | Alternating section background (Hero, Process, FAQ) and inset cards (Pricing, supporting Quotes) |
-| Inverse ground | `#141314` | Closing full-width banner |
-| Primary ink | `#000000` | Headings, key numerals, active borders on light surfaces |
-| Secondary ink | `#373737` | Body copy, navigation links |
-| Muted ink | `#505050` | Captions, metric labels, metadata |
-| Inverse ink | `#fcfcfd` | Labels on `#131313` / `#141314` surfaces |
-| Hairline | `#d6d5d2` | Dividers, secondary button borders, browser-frame borders |
-| Primary action fill | `#131313` | Primary buttons (with `#fcfcfd` label) |
-| Product-only accent | `#ffc61a` | Route arcs, map pins, and golden-hour badges inside product screenshots only |
+| Token | Light (`/`, `cartographer`) | Dark (`atlas` default) | Role |
+|---|---|---|---|
+| Page / Panel ground | `#f5f4f0` | `#141314` / `#1a1918` | Primary surface background |
+| Alternate / Inset card | `#ecebe8` | `#22211f` | Alternating bands and cards |
+| Primary ink | `#000000` | `#f5f4f0` | Headings, active controls |
+| Secondary / Muted ink | `#373737` / `#505050` | `#aba8a1` | Body copy, timeline metadata |
+| Primary action | `#131313` (label `#fcfcfd`) | `#ffc61a` (label `#131313`) | Primary CTAs |
+| Hairline border | `#d6d5d2` | `rgba(214,213,210,0.16)` | Hairlines, secondary button borders |
+| Brand / Golden-hour accent | `#ffc61a` (product only) | `#ffc61a` | Route lines, golden-hour pins, active indicators |
 
 ## 2. Typography
 
 - **Display / Headlines**: `EB Garamond` (weight `500`), sentence case, tight tracking (`-0.025em`), line-height `1.03–1.14`. No italicised or colour-accented emphasis words inside headlines.
-  - Hero `<h1>` size: `83px` at `1440px` (`~5.2×` body), `62px` at `390px`.
-- **Body / Controls**: `Host Grotesk` (weights `400`, `500`, `600`), `16px` base body copy with `1.55` line-height, line length kept under `72ch`.
-- Avoid all-caps eyebrow labels, decorative middot chains, or unprompted arrow glyphs in prose.
+  - Landing Hero `<h1>`: `83px` at `1440px`, `62px` at `390px`.
+- **Body / UI Controls**: `Host Grotesk`, `16px` on `/` and `14px` in the workspace UI.
 
-## 3. Layout, Spacing & Corners
+## 3. Restraint, Pill Reduction & Mobile Rules
 
-- **Container**: `1200px` max width with `24px` (`px-6`) outer page margin on all viewports.
-- **Section rhythm**: Roomy band padding (`128px` top / `85px` bottom at `1440px`; `85px` top / `64px` bottom at `390px`). Sections alternate `#f5f4f0` and `#ecebe8` grounds without horizontal section divider lines.
-- **Corners**: Soft `8px` radius on all surfaces, cards, browser frames, inputs, and buttons.
-- **Cards**: Inset `#ecebe8` surfaces with quiet `#d6d5d2` borders (`1px`), no drop-shadow clutter on page cards.
-
-## 4. Imagery & Framing
-
-- Every product demonstration renders inside a clean `#ecebe8` / `#d6d5d2` light browser frame (`8px` corners, top chrome bar with three window dots and a quiet pill bar).
-- Vivid cartographic blues, greens, sunset warmths, and `#ffc61a` route paths live exclusively inside these browser frames.
-
-## 5. Motion & Static Contract
-
-- Keep motion restrained to direct user actions (mobile menu drawer, FAQ accordion expand/collapse, link hover states), respecting `prefers-reduced-motion`.
-- Static landing (`/`) remains 100% static at build (`prerender.ts`): zero `/api/auth/` requests and zero `/ws/` WebSockets.
+- Avoid decorative `rounded-full` pill clusters on workspace metadata; present dates, access roles, and hotel details as quiet hairline metadata or `4px` structural tags (`rounded-[4px]`). Reserve `rounded-full` for sequence markers (`1`, `2`, `3`) and avatars.
+- Landing page (`/`) stays strictly factual: no pricing/subscription tiers, no fabricated usage metrics, logos, or testimonials.
+- Workspace views must remain usable at `375px–430px` (`100dvh` height, horizontal scroll on tab/date strips, `max-h-[90dvh]` modals, mobile timeline/map switching).
+- Static landing (`/`) executes zero `/api/auth/` requests and zero `/ws/` WebSockets (`prerender.ts`).

@@ -2,7 +2,6 @@ import { computeDaySchedule } from './route-optimizer'
 import type {
   ChecklistData,
   DestinationData,
-  OverviewData,
   StopData,
   TripData,
 } from './trip-types'
@@ -11,7 +10,6 @@ export interface SampleTripBundle {
   trip: TripData
   destinations: Array<DestinationData & { id: string }>
   stops: Array<StopData & { id: string }>
-  overview: OverviewData
   checklists: Array<ChecklistData & { id: string }>
 }
 
@@ -298,73 +296,6 @@ export const SAMPLE_TRIP: SampleTripBundle = {
     },
   ],
   stops: hydrateSampleStops(),
-  overview: {
-    tripId: SAMPLE_TRIP_ID,
-    feasibilityStatus: 'comfortable',
-    feasibilityScore: 91,
-    totalTransitHours: 2.5,
-    summary:
-      '4 days comfortably covers Kyoto’s eastern temples, Arashiyama + Uji day trip, and an overnight ryokan leg in Hakone with only ~2.5h intercity rail transit.',
-    allocations: [
-      {
-        destinationName: 'Kyoto',
-        country: 'Japan',
-        lat: 35.0116,
-        lng: 135.7681,
-        recommendedDays: 3,
-        minDays: 2,
-        transitHoursFromPrev: 0,
-        transportMode: 'none',
-        rationale: 'Anchors Higashiyama sunrise walks, Arashiyama bamboo grove, and an afternoon Uji excursion.',
-        mustSeeHighlights: ['Kiyomizu-dera', 'Fushimi Inari', 'Arashiyama Bamboo'],
-        photoSpots: ['Yasaka Pagoda at dawn', 'Yotsutsuji sunset overlook'],
-        dayTripIdeas: ['Uji matcha & Byodo-in', 'Nara deer park'],
-      },
-      {
-        destinationName: 'Hakone',
-        country: 'Japan',
-        lat: 35.2324,
-        lng: 139.1069,
-        recommendedDays: 1,
-        minDays: 1,
-        transitHoursFromPrev: 2.5,
-        transportMode: 'train',
-        rationale: 'Ideal 24-hour loop for Open-Air Museum, ropeway views, and Lake Ashi sunset.',
-        mustSeeHighlights: ['Hakone Open-Air Museum', 'Lake Ashi Torii'],
-        photoSpots: ['Motohakone Pier Mt. Fuji dusk frame'],
-        dayTripIdeas: [],
-      },
-    ],
-    dailyOutline: [
-      {
-        dayNumber: 1,
-        location: 'Kyoto',
-        theme: 'Higashiyama Sunrise & Torii Sunset',
-        morning: 'Dawn shoot at Kiyomizu-dera and Ninenzaka lanes before tour buses arrive.',
-        afternoon: 'Kaiseki lunch in Gion + quiet Nanzen-ji aqueduct.',
-        evening: 'Fushimi Inari ridge climb for golden hour & lantern-lit descent.',
-        photoMoment: 'Yasaka Pagoda sunrise alignment',
-      },
-      {
-        dayNumber: 2,
-        location: 'Kyoto',
-        theme: 'Arashiyama & Uji Matcha Excursion',
-        morning: 'Bamboo grove & Okochi Sanso villa gardens.',
-        afternoon: 'JR Nara line down to Uji Byodo-in Phoenix Hall.',
-        evening: 'Pontocho alley izakaya dinner.',
-        photoMoment: 'Byodo-in pond reflection before dusk',
-      },
-      {
-        dayNumber: 3,
-        location: 'Hakone',
-        theme: 'Shinkansen to Mountain Loop',
-        morning: 'Morning train to Odawara; drop luggage at ryokan.',
-        afternoon: 'Hakone Open-Air Museum & volcanic valley ropeway.',
-        evening: 'Lake Ashi lakeside torii sunset & onsen soak.',
-        photoMoment: 'Mt. Fuji dusk silhouette from Lake Ashi',
-      },
-    ],
-  },
   checklists: [
     {
       id: 'sample-chk-1',

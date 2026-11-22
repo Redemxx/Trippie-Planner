@@ -9,7 +9,6 @@ export interface NavItem {
 
 export const nav: NavItem[] = [
   { path: '/home', label: 'Atlas Home' },
-  { path: '/overview', label: 'Overview Planner' },
   { path: '/trips/new', label: 'New Trip' },
   { path: '/settings', label: 'Preferences' },
 ]

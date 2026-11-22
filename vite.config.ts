@@ -46,6 +46,19 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            { name: 'vendor-react', test: /node_modules\/(react|react-dom|react-router|react-router-dom)\//, priority: 20 },
+            { name: 'vendor-ui', test: /node_modules\/(lucide-react|@base-ui|@radix-ui|clsx|tailwind-merge)\//, priority: 15 },
+            { name: 'vendor-deepspace', test: /node_modules\/deepspace\//, priority: 10 },
+          ],
+        },
+      },
+    },
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

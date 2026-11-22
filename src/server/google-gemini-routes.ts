@@ -44,17 +44,12 @@ export type StoredGoogleCredential = {
   expiresAt?: number
 }
 
-function hmacSecret(env: Env): string {
-  return env.USER_CREDENTIALS_ENCRYPTION_KEY || env.APP_IDENTITY_TOKEN || env.APP_OWNER_JWT || env.DEEPSPACE_APP_ID
+function hmacSecret(env: Env): string | null {
+  return env.USER_CREDENTIALS_ENCRYPTION_KEY || env.APP_IDENTITY_TOKEN || env.APP_OWNER_JWT || null
 }
 
-function credentialEncryptionKey(env: Env): string {
-  return (
-    env.USER_CREDENTIALS_ENCRYPTION_KEY ||
-    env.APP_IDENTITY_TOKEN ||
-    env.APP_OWNER_JWT ||
-    env.DEEPSPACE_APP_ID
-  )
+function credentialEncryptionKey(env: Env): string | null {
+  return env.USER_CREDENTIALS_ENCRYPTION_KEY || env.APP_IDENTITY_TOKEN || env.APP_OWNER_JWT || null
 }
 
 async function hmacSign(data: string, secret: string): Promise<string> {
@@ -69,17 +64,21 @@ async function hmacSign(data: string, secret: string): Promise<string> {
   return toBase64Url(new Uint8Array(sig))
 }
 
-async function signState(payload: Record<string, unknown>, env: Env): Promise<string> {
+async function signState(payload: Record<string, unknown>, env: Env): Promise<string | null> {
+  const secret = hmacSecret(env)
+  if (!secret) return null
   const encoded = toBase64Url(new TextEncoder().encode(JSON.stringify(payload)))
-  const sig = await hmacSign(encoded, hmacSecret(env))
+  const sig = await hmacSign(encoded, secret)
   return `${encoded}.${sig}`
 }
 
 async function verifyState(state: string, env: Env): Promise<Record<string, unknown> | null> {
+  const secret = hmacSecret(env)
+  if (!secret) return null
   const parts = state.split('.')
   if (parts.length !== 2) return null
   const [encoded, sig] = parts
-  const expected = await hmacSign(encoded, hmacSecret(env))
+  const expected = await hmacSign(encoded, secret)
   if (sig.length !== expected.length) return null
   let diff = 0
   for (let i = 0; i < sig.length; i++) {
@@ -113,6 +112,7 @@ export async function getUserGeminiCredential(
   const data = rec.data
 
   const encKey = credentialEncryptionKey(env)
+  if (!encKey) return null
 
   if (data.authType === 'api_key' && data.apiKey) {
     const apiKey = await decryptCredentialSecret(data.apiKey, encKey, userId)
@@ -133,6 +133,9 @@ export async function getUserGeminiCredential(
       : null
     const needsRefresh =
       typeof data.expiresAt === 'number' && Date.now() >= data.expiresAt - 60_000
+    const isExpired =
+      typeof data.expiresAt === 'number' && Date.now() >= data.expiresAt
+    let refreshedOk = false
 
     if (needsRefresh && refreshToken && env.GOOGLE_OAUTH_CLIENT_ID && env.GOOGLE_OAUTH_CLIENT_SECRET) {
       const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
@@ -152,6 +155,7 @@ export async function getUserGeminiCredential(
         }
         if (refreshed.access_token) {
           accessToken = refreshed.access_token
+          refreshedOk = true
           const encryptedAccess = await encryptCredentialSecret(accessToken, encKey, userId)
           await tools.update('user_ai_credentials', rec.recordId, {
             accessToken: encryptedAccess,
@@ -159,6 +163,10 @@ export async function getUserGeminiCredential(
           })
         }
       }
+    }
+
+    if (isExpired && !refreshedOk) {
+      return null
     }
 
     return {
@@ -176,8 +184,9 @@ async function upsertGoogleCredential(
   env: Env,
   userId: string,
   cred: Omit<StoredGoogleCredential, 'userId' | 'provider'>,
-): Promise<void> {
+): Promise<boolean> {
   const encKey = credentialEncryptionKey(env)
+  if (!encKey) return false
   const encryptedCred: Omit<StoredGoogleCredential, 'userId' | 'provider'> = {
     ...cred,
     apiKey: cred.apiKey ? await encryptCredentialSecret(cred.apiKey, encKey, userId) : undefined,
@@ -203,6 +212,29 @@ async function upsertGoogleCredential(
       ...encryptedCred,
     })
   }
+  return true
+}
+
+function buildGoogleOAuthStartParams(
+  clientId: string,
+  redirectUri: string,
+  state: string,
+): string {
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    access_type: 'offline',
+    prompt: 'consent',
+    scope: [
+      'openid',
+      'email',
+      'https://www.googleapis.com/auth/generative-language.retriever',
+      'https://www.googleapis.com/auth/cloud-platform',
+    ].join(' '),
+    state,
+  })
+  return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
 }
 
 export function registerGoogleGeminiRoutes(app: Hono<AppContext>): void {
@@ -226,9 +258,11 @@ export function registerGoogleGeminiRoutes(app: Hono<AppContext>): void {
     const auth = await resolveAuth(c.req.raw, c.env)
     if (!auth) return c.json({ error: 'Unauthorized' }, 401)
 
-    const body = await c.req
-      .json<{ apiKey?: string; googleEmail?: string }>()
-      .catch(() => ({}) as { apiKey?: string; googleEmail?: string })
+    const raw = await c.req.json<unknown>().catch(() => null)
+    const body = (raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as {
+      apiKey?: string
+      googleEmail?: string
+    }
     const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : ''
     if (!apiKey || apiKey.length < 16) {
       return c.json({ error: 'Enter a valid Google Gemini API key.' }, 400)
@@ -254,7 +288,7 @@ export function registerGoogleGeminiRoutes(app: Hono<AppContext>): void {
         ? body.googleEmail.trim()
         : auth.claims.email || undefined
 
-    await upsertGoogleCredential(c.env, auth.userId, {
+    const saved = await upsertGoogleCredential(c.env, auth.userId, {
       authType: 'api_key',
       googleEmail,
       apiKey,
@@ -262,6 +296,9 @@ export function registerGoogleGeminiRoutes(app: Hono<AppContext>): void {
       refreshToken: undefined,
       expiresAt: undefined,
     })
+    if (!saved) {
+      return c.json({ error: 'Credential encryption is not configured on this server.' }, 503)
+    }
 
     return c.json({
       connected: true,
@@ -270,7 +307,11 @@ export function registerGoogleGeminiRoutes(app: Hono<AppContext>): void {
     })
   })
 
-  app.get('/api/ai/google/oauth/start', async (c) => {
+  // Authenticated OAuth initiation without passing JWT in query parameters
+  app.post('/api/ai/google/oauth/start', async (c) => {
+    const auth = await resolveAuth(c.req.raw, c.env)
+    if (!auth) return c.json({ error: 'Unauthorized' }, 401)
+
     const clientId = c.env.GOOGLE_OAUTH_CLIENT_ID
     const clientSecret = c.env.GOOGLE_OAUTH_CLIENT_SECRET
     if (!clientId || !clientSecret) {
@@ -283,14 +324,38 @@ export function registerGoogleGeminiRoutes(app: Hono<AppContext>): void {
       )
     }
 
-    const tokenParam = c.req.query('token')
-    const reqWithAuth = tokenParam
-      ? new Request(c.req.url, {
-        headers: { Authorization: `Bearer ${tokenParam}` },
-      })
-      : c.req.raw
-    const auth = await resolveAuth(reqWithAuth, c.env)
+    const origin = new URL(c.req.url).origin
+    const redirectUri = `${origin}/api/ai/google/oauth/callback`
+    const state = await signState(
+      {
+        userId: auth.userId,
+        exp: Date.now() + 10 * 60_000,
+        nonce: crypto.randomUUID(),
+      },
+      c.env,
+    )
+    if (!state) {
+      return c.json({ error: 'Credential signing secret is not configured on this server.' }, 503)
+    }
+
+    return c.json({ authUrl: buildGoogleOAuthStartParams(clientId, redirectUri, state) })
+  })
+
+  app.get('/api/ai/google/oauth/start', async (c) => {
+    const auth = await resolveAuth(c.req.raw, c.env)
     if (!auth) return c.json({ error: 'Unauthorized' }, 401)
+
+    const clientId = c.env.GOOGLE_OAUTH_CLIENT_ID
+    const clientSecret = c.env.GOOGLE_OAUTH_CLIENT_SECRET
+    if (!clientId || !clientSecret) {
+      return c.json(
+        {
+          error:
+            'Google OAuth for Gemini is not configured on this app yet. Set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET via `npx deepspace secrets set`, or link your Google AI Studio key.',
+        },
+        400,
+      )
+    }
 
     const origin = new URL(c.req.url).origin
     const redirectUri = `${origin}/api/ai/google/oauth/callback`
@@ -302,23 +367,11 @@ export function registerGoogleGeminiRoutes(app: Hono<AppContext>): void {
       },
       c.env,
     )
+    if (!state) {
+      return c.json({ error: 'Credential signing secret is not configured on this server.' }, 503)
+    }
 
-    const params = new URLSearchParams({
-      client_id: clientId,
-      redirect_uri: redirectUri,
-      response_type: 'code',
-      access_type: 'offline',
-      prompt: 'consent',
-      scope: [
-        'openid',
-        'email',
-        'https://www.googleapis.com/auth/generative-language.retriever',
-        'https://www.googleapis.com/auth/cloud-platform',
-      ].join(' '),
-      state,
-    })
-
-    return c.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`)
+    return c.redirect(buildGoogleOAuthStartParams(clientId, redirectUri, state))
   })
 
   app.get('/api/ai/google/oauth/callback', async (c) => {
@@ -375,7 +428,7 @@ export function registerGoogleGeminiRoutes(app: Hono<AppContext>): void {
       // Optional email display
     }
 
-    await upsertGoogleCredential(c.env, state.userId, {
+    const saved = await upsertGoogleCredential(c.env, state.userId, {
       authType: 'oauth',
       googleEmail,
       accessToken: tokens.access_token,
@@ -383,6 +436,9 @@ export function registerGoogleGeminiRoutes(app: Hono<AppContext>): void {
       expiresAt: Date.now() + (tokens.expires_in ?? 3600) * 1000,
       apiKey: undefined,
     })
+    if (!saved) {
+      return c.redirect(`${origin}/settings?google_gemini=error`)
+    }
 
     return c.redirect(`${origin}/settings?google_gemini=connected`)
   })

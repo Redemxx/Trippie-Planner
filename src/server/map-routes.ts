@@ -1,7 +1,7 @@
 import type { Hono } from 'hono'
 import type { AppContext } from '../../worker.js'
 
-const ALLOWED_STYLES = new Set(['dark_all', 'light_all'])
+const ALLOWED_STYLES = new Set(['dark_all', 'light_all', 'voyager'])
 
 export function registerMapRoutes(app: Hono<AppContext>): void {
   app.get('/api/map-config', (c) => {
@@ -25,7 +25,8 @@ export function registerMapRoutes(app: Hono<AppContext>): void {
       return c.json({ error: 'Invalid tile coordinates' }, 400)
     }
 
-    const upstream = `https://a.basemaps.cartocdn.com/${style}/${z}/${x}/${yRaw}.png?api_key=${encodeURIComponent(apiKey)}`
+    const pathPrefix = style === 'voyager' ? 'rastertiles/voyager' : style
+    const upstream = `https://a.basemaps.cartocdn.com/${pathPrefix}/${z}/${x}/${yRaw}.png?api_key=${encodeURIComponent(apiKey)}`
     const res = await fetch(upstream)
     if (!res.ok) {
       return new Response('Tile unavailable', { status: 502 })

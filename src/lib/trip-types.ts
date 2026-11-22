@@ -1,8 +1,33 @@
-export type TripMode = 'detailed' | 'overview'
+export type TripMode = 'detailed'
 export type TripPace = 'relaxed' | 'balanced' | 'packed'
 export type BudgetTier = 'budget' | 'moderate' | 'luxury'
-export type TransportMode = 'walk' | 'transit' | 'drive'
-export type IntercityTransport = 'flight' | 'train' | 'drive' | 'ferry' | 'bus' | 'none'
+export type TransportMode = 'walk' | 'transit' | 'drive' | 'bullet_train' | 'flight'
+export type IntercityTransport =
+  | 'bullet_train'
+  | 'flight'
+  | 'train'
+  | 'drive'
+  | 'ferry'
+  | 'bus'
+  | 'none'
+
+export const TRANSPORT_MODE_LABELS: Record<TransportMode, string> = {
+  walk: 'Walk',
+  transit: 'Local transit',
+  drive: 'Car / Taxi',
+  bullet_train: 'Bullet train',
+  flight: 'Flight',
+}
+
+export const INTERCITY_TRANSPORT_LABELS: Record<IntercityTransport, string> = {
+  bullet_train: 'Bullet train',
+  train: 'Train',
+  flight: 'Flight',
+  drive: 'Drive / Car',
+  bus: 'Bus',
+  ferry: 'Ferry',
+  none: 'Starting base',
+}
 
 export type StopCategory =
   | 'must_see'
@@ -71,6 +96,12 @@ export type DestinationData = {
   lng?: number
   arrivalDate?: string
   departureDate?: string
+  lodgingName?: string
+  lodgingAddress?: string
+  lodgingLat?: number
+  lodgingLng?: number
+  checkInTime?: string
+  checkOutTime?: string
   orderIndex: number
   suggestedDays?: number
   minDays?: number
@@ -97,6 +128,7 @@ export type StopData = {
   fixedTime?: boolean
   preferredWindow?: PreferredWindow
   transportMode?: TransportMode
+  transportOverridden?: boolean
   travelMinutesFromPrev?: number
   travelDistanceKmFromPrev?: number
   estimatedCost?: number
@@ -105,43 +137,6 @@ export type StopData = {
   bestLightWindow?: LightWindow
   notes?: string
   sourceUrl?: string
-}
-
-export type OverviewAllocation = {
-  destinationName: string
-  country?: string
-  lat?: number
-  lng?: number
-  recommendedDays: number
-  minDays: number
-  transitHoursFromPrev: number
-  transportMode: IntercityTransport
-  rationale: string
-  mustSeeHighlights: string[]
-  photoSpots: string[]
-  dayTripIdeas: string[]
-}
-
-export type OverviewDayBlock = {
-  dayNumber: number
-  location: string
-  theme: string
-  morning: string
-  afternoon: string
-  evening: string
-  photoMoment?: string
-}
-
-export type OverviewData = {
-  tripId: string
-  ownerId?: string
-  editors?: string[]
-  feasibilityStatus: 'comfortable' | 'ambitious' | 'overpacked'
-  feasibilityScore: number
-  totalTransitHours: number
-  summary: string
-  allocations: OverviewAllocation[]
-  dailyOutline: OverviewDayBlock[]
 }
 
 export type ChecklistData = {
@@ -170,6 +165,7 @@ export type TripInviteData = {
   token: string
   role: 'viewer' | 'editor'
   invitedEmail?: string
+  expiresAt?: number
   status: 'pending' | 'accepted' | 'revoked'
 }
 

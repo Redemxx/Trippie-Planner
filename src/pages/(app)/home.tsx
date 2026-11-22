@@ -4,14 +4,11 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   ArrowRight,
+  BedDouble,
   Calendar,
   Camera,
-  Compass,
-  Copy,
-  Map as MapIcon,
   MapPin,
   Plus,
-  Route,
   Users,
 } from 'lucide-react'
 import { AuthOverlay, useAuth, useQuery } from 'deepspace'
@@ -19,15 +16,16 @@ import {
   Badge,
   Button,
   EmptyState,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
   useToast,
 } from '@/components/ui'
 import { AtlasMap } from '@/components/trip/AtlasMap'
 import { callTripAction } from '@/lib/actions-client'
-import { computeDaySchedule } from '@/lib/route-optimizer'
+import {
+  computeDaySchedule,
+  hotelPointFromDestination,
+  isCheckInOrOutStop,
+  resolveDayContext,
+} from '@/lib/route-optimizer'
 import { SAMPLE_TRIP } from '@/lib/sample-trip'
 import {
   CATEGORY_META,
@@ -50,33 +48,36 @@ export default function HomePage() {
   const { records: memberRecords } = useQuery<TeamMemberData>('team_members')
 
   const [showAuth, setShowAuth] = useState(false)
-  const [cloning, setCloning] = useState(false)
   const [sampleDay, setSampleDay] = useState(1)
-  const [sampleTab, setSampleTab] = useState<'itinerary' | 'overview'>('itinerary')
   const [selectedSampleStop, setSelectedSampleStop] = useState<string | null>(null)
 
   const sampleDayStops = useMemo(
     () => SAMPLE_TRIP.stops.filter((s) => s.dayNumber === sampleDay),
     [sampleDay],
   )
-  const sampleSchedule = useMemo(() => computeDaySchedule(sampleDayStops), [sampleDayStops])
-
-  async function handleCloneSample() {
-    if (!isSignedIn) {
-      setShowAuth(true)
-      return
+  const sampleHotels = useMemo(() => {
+    const ctx = resolveDayContext(
+      sampleDay,
+      SAMPLE_TRIP.trip.totalDays ?? 4,
+      SAMPLE_TRIP.trip.startDate,
+      SAMPLE_TRIP.destinations,
+    )
+    const startDest = ctx.isLocationChange ? ctx.previousDestination ?? ctx.destination : ctx.destination
+    const endDest = ctx.destination ?? ctx.previousDestination
+    return {
+      startHotel: hotelPointFromDestination(startDest),
+      endHotel: hotelPointFromDestination(endDest),
     }
-    setCloning(true)
-    try {
-      const res = await callTripAction<{ tripId: string }>('cloneSampleTrip')
-      success('Sample trip cloned', 'Kyoto & Hakone Autumn Atlas is now in your workspace.')
-      navigate(`/trips/${res.tripId}`)
-    } catch (err) {
-      error('Could not clone sample trip', err instanceof Error ? err.message : 'Failed')
-    } finally {
-      setCloning(false)
-    }
-  }
+  }, [sampleDay])
+  const sampleSchedule = useMemo(
+    () =>
+      computeDaySchedule(
+        sampleDayStops,
+        9 * 60,
+        sampleHotels.startHotel ?? undefined,
+      ),
+    [sampleDayStops, sampleHotels],
+  )
 
   function resolveUserRoleForTrip(trip: TripData, tripId: string): 'Owner' | 'Editor' | 'Viewer' {
     if (trip.ownerId === userId) return 'Owner'
@@ -89,40 +90,28 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-full px-5 py-6 text-foreground md:px-8 md:py-8">
-      <div className="mx-auto max-w-6xl space-y-8">
+    <div className="min-h-full px-4 py-5 text-foreground sm:px-6 md:px-8 md:py-8">
+      <div className="mx-auto max-w-6xl space-y-7">
         {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-6">
           <div>
-            <p className="font-mono text-xs uppercase tracking-widest text-primary">
-              Trippie Atlas
-            </p>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground md:text-3xl">
+            <p className="text-xs font-medium text-primary">Trippie Atlas</p>
+            <h1 className="font-editorial-display mt-1 text-3xl font-medium tracking-tight text-foreground md:text-4xl">
               {isSignedIn ? 'Your Vacation Atlas' : 'Kyoto & Hakone Route Atlas'}
             </h1>
             <p className="mt-1 max-w-xl text-sm text-muted-foreground">
               {isSignedIn
-                ? 'Build multi-stop itineraries, test pacing in Overview Mode, optimize transit legs, and steer plans with your AI Concierge.'
-                : 'Preview a live travel-time optimized itinerary with golden-hour photo spots and overview pacing. Sign in to create and co-edit your own trips.'}
+                ? 'Build multi-stop itineraries anchored around hotels, optimize transit legs, and steer plans with your AI Concierge.'
+                : 'Preview a live travel-time optimized itinerary with golden-hour photo spots. Sign in to create and co-edit your own trips.'}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             {isSignedIn ? (
-              <>
-                <Button variant="outline" loading={cloning} onClick={handleCloneSample}>
-                  <Copy className="size-3.5" aria-hidden />
-                  Clone Kyoto Sample
-                </Button>
-                <Button variant="secondary" onClick={() => navigate('/overview')}>
-                  <MapIcon className="size-3.5" aria-hidden />
-                  Overview Mode
-                </Button>
-                <Button onClick={() => navigate('/trips/new')} data-testid="new-trip-cta">
-                  <Plus className="size-3.5" aria-hidden />
-                  New Trip
-                </Button>
-              </>
+              <Button onClick={() => navigate('/trips/new')} data-testid="new-trip-cta">
+                <Plus className="size-3.5" aria-hidden />
+                New Trip
+              </Button>
             ) : (
               <>
                 <Button variant="outline" onClick={() => setShowAuth(true)}>
@@ -154,11 +143,10 @@ export default function HomePage() {
               </div>
             ) : tripRecords.length === 0 ? (
               <EmptyState
-                icon={<Compass className="size-5" />}
+                icon={<MapPin className="size-5" />}
                 title="No trips plotted yet"
-                description="Create a dated itinerary, start with Broad Overview Mode to test how long you can stay in each city, or clone the Kyoto sample trip."
+                description="Create a dated itinerary anchored around your hotels to start planning."
                 action={{ label: 'Create a Trip', onClick: () => navigate('/trips/new') }}
-                secondaryAction={{ label: 'Clone Kyoto Sample', onClick: handleCloneSample }}
               />
             ) : (
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -180,14 +168,12 @@ export default function HomePage() {
                       className="group flex flex-col justify-between rounded-xl border border-border bg-card p-5 transition-colors hover:border-primary/60"
                     >
                       <div>
-                        <div className="flex items-center justify-between gap-2">
-                          <Badge variant={t.mode === 'overview' ? 'secondary' : 'default'}>
-                            {t.mode === 'overview' ? 'Overview Mode' : 'Detailed'}
-                          </Badge>
-                          <Badge variant="outline">{role}</Badge>
+                        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                          <span className="font-medium text-primary">Trip Itinerary</span>
+                          <span>{role}</span>
                         </div>
 
-                        <h3 className="mt-3 text-base font-semibold text-foreground group-hover:text-primary">
+                        <h3 className="mt-2.5 text-base font-semibold text-foreground group-hover:text-primary">
                           {t.title}
                         </h3>
 
@@ -239,134 +225,97 @@ export default function HomePage() {
               </Button>
             </div>
 
-            <Tabs
-              value={sampleTab}
-              onValueChange={(v) => setSampleTab(v as 'itinerary' | 'overview')}
-            >
-              <TabsList>
-                <TabsTrigger value="itinerary">Daily Route &amp; Map</TabsTrigger>
-                <TabsTrigger value="overview">Broad Overview Pacing</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="itinerary" className="mt-4">
-                <div className="grid gap-6 lg:grid-cols-12">
-                  <div className="space-y-3 lg:col-span-7">
-                    <div className="flex items-center gap-2">
-                      {[1, 2, 3].map((d) => (
-                        <button
-                          key={d}
-                          type="button"
-                          onClick={() => setSampleDay(d)}
-                          className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
-                            sampleDay === d
-                              ? 'border-primary bg-primary text-primary-foreground'
-                              : 'border-border bg-card text-muted-foreground hover:text-foreground'
-                          }`}
-                        >
-                          Day {d}
-                        </button>
-                      ))}
-                      <span className="ml-auto font-mono text-xs text-muted-foreground">
-                        {sampleSchedule.totalTravelMinutes}m transit ·{' '}
-                        {sampleSchedule.totalDistanceKm.toFixed(1)} km
-                      </span>
-                    </div>
-
-                    {sampleSchedule.items.map((item, idx) => {
-                      const meta = CATEGORY_META[item.stop.category]
-                      return (
-                        <div key={item.stop.id}>
-                          {idx > 0 && (
-                            <div className="ml-5 border-l border-dashed border-border py-1.5 pl-4 font-mono text-[11px] text-muted-foreground">
-                              {item.travelMinutesFromPrev} min {item.stop.transportMode} ·{' '}
-                              {item.travelDistanceKmFromPrev.toFixed(1)} km
-                            </div>
-                          )}
-                          <div
-                            onClick={() => setSelectedSampleStop(item.stop.id)}
-                            className={`cursor-pointer rounded-xl border p-3.5 transition-colors ${
-                              selectedSampleStop === item.stop.id
-                                ? 'border-primary bg-accent/40'
-                                : 'border-border bg-card'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <span
-                                className="flex size-5 items-center justify-center rounded-full text-[11px] font-bold text-primary-foreground"
-                                style={{ backgroundColor: meta.color }}
-                              >
-                                {idx + 1}
-                              </span>
-                              <span className="font-mono text-xs text-primary">
-                                {item.startTime}–{item.endTime}
-                              </span>
-                              <Badge variant="secondary" className="text-[10px]">
-                                {meta.label}
-                              </Badge>
-                            </div>
-                            <h3 className="mt-1.5 text-sm font-semibold text-foreground">
-                              {item.stop.title}
-                            </h3>
-                            {item.stop.photoTip && (
-                              <p className="mt-1.5 flex items-start gap-1.5 text-xs text-muted-foreground">
-                                <Camera className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden />
-                                <span>
-                                  {item.stop.bestLightWindow && item.stop.bestLightWindow !== 'any'
-                                    ? `${LIGHT_WINDOW_LABELS[item.stop.bestLightWindow]}: `
-                                    : ''}
-                                  {item.stop.photoTip}
-                                </span>
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-
-                  <div className="lg:col-span-5">
-                    <AtlasMap
-                      stops={sampleDayStops}
-                      destinations={SAMPLE_TRIP.destinations}
-                      selectedStopId={selectedSampleStop}
-                      onSelectStop={setSelectedSampleStop}
-                      className="h-[420px]"
-                    />
-                  </div>
+            <div className="grid gap-6 lg:grid-cols-12">
+              <div className="space-y-3 lg:col-span-5">
+                <div className="flex items-center gap-2">
+                  {[1, 2, 3].map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setSampleDay(d)}
+                      className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                        sampleDay === d
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-border bg-card text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Day {d}
+                    </button>
+                  ))}
+                  <span className="ml-auto font-mono text-xs text-muted-foreground">
+                    {sampleSchedule.totalTravelMinutes}m transit ·{' '}
+                    {sampleSchedule.totalDistanceKm.toFixed(1)} km
+                  </span>
                 </div>
-              </TabsContent>
 
-              <TabsContent value="overview" className="mt-4">
-                <div className="space-y-4 rounded-xl border border-border bg-card p-5">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <Badge variant="outline" className="border-success/40 text-success">
-                      Comfortable Pace · {SAMPLE_TRIP.overview.feasibilityScore}/100
-                    </Badge>
-                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                      <Route className="size-3.5 text-primary" aria-hidden />
-                      {SAMPLE_TRIP.overview.totalTransitHours}h intercity transit
-                    </span>
-                  </div>
-                  <p className="text-sm text-foreground">{SAMPLE_TRIP.overview.summary}</p>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {SAMPLE_TRIP.overview.allocations.map((alloc) => (
+                {sampleSchedule.items.map((item, idx) => {
+                  const meta = CATEGORY_META[item.stop.category]
+                  return (
+                    <div key={item.stop.id}>
+                      {idx > 0 && (
+                        <div className="ml-5 border-l border-dashed border-border py-1.5 pl-4 font-mono text-[11px] text-muted-foreground">
+                          {item.travelMinutesFromPrev} min {item.stop.transportMode} ·{' '}
+                          {item.travelDistanceKmFromPrev.toFixed(1)} km
+                        </div>
+                      )}
                       <div
-                        key={alloc.destinationName}
-                        className="rounded-lg border border-border bg-muted/30 p-3.5 text-xs"
+                        onClick={() => setSelectedSampleStop(item.stop.id)}
+                        className={`cursor-pointer rounded-xl border p-3.5 transition-colors ${
+                          selectedSampleStop === item.stop.id
+                            ? 'border-primary bg-accent/40'
+                            : 'border-border bg-card'
+                        }`}
                       >
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-semibold text-foreground">
-                            {alloc.destinationName}
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="flex size-5 items-center justify-center rounded-full text-[11px] font-bold text-primary-foreground"
+                            style={{ backgroundColor: meta.color }}
+                          >
+                            {isCheckInOrOutStop(item.stop) ? (
+                              <BedDouble className="size-3" aria-label="Hotel" />
+                            ) : (
+                              idx + 1
+                            )}
                           </span>
-                          <Badge>{alloc.recommendedDays} days</Badge>
+                          <span className="font-mono text-xs text-primary">
+                            {item.startTime}–{item.endTime}
+                          </span>
+                          <Badge variant="secondary" className="text-[10px]">
+                            {meta.label}
+                          </Badge>
                         </div>
-                        <p className="mt-2 text-muted-foreground">{alloc.rationale}</p>
+                        <h3 className="mt-1.5 text-sm font-semibold text-foreground">
+                          {item.stop.title}
+                        </h3>
+                        {item.stop.photoTip && (
+                          <p className="mt-1.5 flex items-start gap-1.5 text-xs text-muted-foreground">
+                            <Camera className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden />
+                            <span>
+                              {item.stop.bestLightWindow && item.stop.bestLightWindow !== 'any'
+                                ? `${LIGHT_WINDOW_LABELS[item.stop.bestLightWindow]}: `
+                                : ''}
+                              {item.stop.photoTip}
+                            </span>
+                          </p>
+                        )}
                       </div>
-                    ))}
-                  </div>
-                </div>
-              </TabsContent>
-            </Tabs>
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div className="lg:col-span-7">
+                <AtlasMap
+                  stops={sampleDayStops}
+                  destinations={SAMPLE_TRIP.destinations}
+                  startHotel={sampleHotels.startHotel}
+                  endHotel={sampleHotels.endHotel}
+                  selectedStopId={selectedSampleStop}
+                  onSelectStop={setSelectedSampleStop}
+                  className="h-[380px] sm:h-[460px] lg:h-[580px]"
+                />
+              </div>
+            </div>
           </section>
         )}
       </div>

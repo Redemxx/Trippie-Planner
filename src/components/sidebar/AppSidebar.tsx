@@ -27,7 +27,6 @@ import {
   Compass,
   LogIn,
   LogOut,
-  Map,
   Menu,
   PanelLeftClose,
   PlusCircle,
@@ -57,7 +56,6 @@ import {
 /** Icon per nav route; keeps nav.ts as plain data (feature-added entries get the fallback). */
 const NAV_ICONS: Record<string, LucideIcon> = {
   '/home': Compass,
-  '/overview': Map,
   '/trips/new': PlusCircle,
   '/settings': Settings,
 }
@@ -322,7 +320,7 @@ export function AppSidebar({ mobileOpen, onMobileClose }: AppSidebarProps) {
 /** Minimal mobile top bar (<md) — hamburger + app name. */
 export function SidebarMobileHeader({ onOpenMenu }: { onOpenMenu: () => void }) {
   return (
-    <div className="flex h-12 flex-none items-center gap-3 border-b border-border bg-shell px-3 md:hidden">
+    <div className="flex h-12 flex-none items-center gap-3 border-b border-border bg-shell px-3 pr-16 md:hidden">
       <button
         type="button"
         onClick={onOpenMenu}
@@ -331,7 +329,12 @@ export function SidebarMobileHeader({ onOpenMenu }: { onOpenMenu: () => void }) 
       >
         <Menu size={18} aria-hidden />
       </button>
-      <span className="text-sm font-semibold text-foreground">{APP_NAME}</span>
+      <Link to="/home" className="flex items-center gap-2">
+        <span className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
+          <Compass className="size-3.5" aria-hidden />
+        </span>
+        <span className="font-editorial-display text-lg font-medium text-foreground">{APP_NAME}</span>
+      </Link>
     </div>
   )
 }

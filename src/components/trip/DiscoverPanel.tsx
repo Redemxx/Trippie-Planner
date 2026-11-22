@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Camera, Calendar, Compass, MapPin, Plus, RefreshCw, Sparkles, Utensils } from 'lucide-react'
 import { integration } from 'deepspace'
 import {
@@ -69,6 +69,17 @@ export function DiscoverPanel({
   const [addingId, setAddingId] = useState<string | null>(null)
 
   const effectiveDest = selectedDest || destinations[0]?.name || ''
+
+  useEffect(() => {
+    if (destinations.length === 0) return
+    if (!selectedDest || !destinations.some((d) => d.name === selectedDest)) {
+      setSelectedDest(destinations[0].name)
+    }
+  }, [destinations, selectedDest])
+
+  useEffect(() => {
+    setTargetDay(String(activeDay))
+  }, [activeDay])
 
   async function runSearch(tabOverride?: FilterTab) {
     const activeTab = tabOverride ?? filter

@@ -6,13 +6,18 @@ async function waitForApp(page: import('@playwright/test').Page) {
 }
 
 test.describe('Smoke tests', () => {
-  test('static landing loads without JS errors and shows Trippie copy', async ({ page }) => {
+  test('static landing loads without JS errors and shows minimal Trippie copy', async ({
+    page,
+  }) => {
     const errors = captureConsoleErrors(page)
     await page.goto('/')
     await waitForApp(page)
     await expect(page.getByTestId('static-landing')).toBeVisible()
     await expect(page.locator('h1')).toContainText('Chart every hour, not just flights.')
     await expect(page.locator('body')).not.toContainText('placeholder page')
+    await expect(page.locator('body')).not.toContainText('$12')
+    await expect(page.locator('body')).not.toContainText('Hanna Ostrowski')
+    await expect(page.locator('body')).not.toContainText('14,200')
     expect(errors).toEqual([])
   })
 
@@ -45,17 +50,12 @@ test.describe('Smoke tests', () => {
     await expect(page.getByTestId('nav-user-name')).toHaveCount(0)
     await expect(page.getByTestId('sample-atlas-preview')).toBeVisible()
     await expect(page.getByText('Kiyomizu-dera Temple Terrace')).toBeVisible()
-
-    // Switch to Broad Overview Pacing tab
-    await page.getByRole('tab', { name: /Broad Overview Pacing/i }).click()
-    await expect(page.getByText(/Comfortable Pace/i)).toBeVisible()
+    await page.getByRole('button', { name: 'Day 2' }).click()
+    await expect(page.getByText('Arashiyama Bamboo & Okochi Sanso')).toBeVisible()
   })
 
   test('protected routes prompt sign-in when signed out', async ({ page }) => {
     await page.goto('/trips/new')
-    await expect(page.getByText('Sign in to continue')).toBeVisible({ timeout: 15000 })
-
-    await page.goto('/overview')
     await expect(page.getByText('Sign in to continue')).toBeVisible({ timeout: 15000 })
   })
 
@@ -63,5 +63,25 @@ test.describe('Smoke tests', () => {
     await page.goto('/nonexistent-page-xyz')
     await waitForApp(page)
     await expect(page.locator('text=404')).toBeVisible()
+  })
+
+  test('phone viewport (390x844) renders / and /home without horizontal overflow', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+
+    await page.goto('/')
+    await expect(page.getByTestId('static-landing')).toBeVisible()
+    const landingOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth + 1,
+    )
+    expect(landingOverflow).toBe(true)
+
+    await page.goto('/home')
+    await expect(page.getByTestId('sample-atlas-preview')).toBeVisible({ timeout: 15000 })
+    const homeOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth + 1,
+    )
+    expect(homeOverflow).toBe(true)
   })
 })

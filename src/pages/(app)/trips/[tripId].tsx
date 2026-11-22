@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
+  BedDouble,
+  Clock,
   CloudSun,
   Download,
   Lock,
   MapPin,
   Pencil,
-  RefreshCw,
+  RotateCcw,
   Share2,
   Sparkles,
   Trash2,
@@ -16,7 +18,6 @@ import { AuthOverlay, useAuth, usePresenceRoom, useQuery } from 'deepspace'
 import {
   Avatar,
   AvatarFallback,
-  Badge,
   Button,
   ConfirmModal,
   EmptyState,
@@ -39,23 +40,33 @@ import { AtlasMap } from '@/components/trip/AtlasMap'
 import { BudgetChecklistTab } from '@/components/trip/BudgetChecklistTab'
 import { DiscoverPanel } from '@/components/trip/DiscoverPanel'
 import { ItineraryTimeline } from '@/components/trip/ItineraryTimeline'
-import { OverviewPlannerView } from '@/components/trip/OverviewPlannerView'
+import { ManageStaysModal } from '@/components/trip/ManageStaysModal'
 import { ShareTripModal } from '@/components/trip/ShareTripModal'
 import { useTripChat } from '@/contexts/TripChatContext'
 import { callTripAction } from '@/lib/actions-client'
 import { itineraryToMarkdown } from '@/lib/export-itinerary'
-import type {
-  BudgetTier,
-  ChecklistData,
-  DestinationData,
-  OverviewData,
-  StopCategory,
-  StopData,
-  TeamMemberData,
-  TransportMode,
-  TripAccessRole,
-  TripData,
-  TripPace,
+import {
+  computeDaySchedule,
+  diffDaysInclusive,
+  formatIsoDateLabel,
+  isoAddDays,
+  resolveActiveDayHotels,
+  resolveDayContext,
+  resolveEffectiveTripStartDate,
+} from '@/lib/route-optimizer'
+import {
+  INTERCITY_TRANSPORT_LABELS,
+  type BudgetTier,
+  type ChecklistData,
+  type DestinationData,
+  type IntercityTransport,
+  type StopCategory,
+  type StopData,
+  type TeamMemberData,
+  type TransportMode,
+  type TripAccessRole,
+  type TripData,
+  type TripPace,
 } from '@/lib/trip-types'
 
 const PACE_LABELS: Record<TripPace, string> = {
@@ -73,7 +84,9 @@ const BUDGET_LABELS: Record<BudgetTier, string> = {
 const TRANSPORT_LABELS: Record<TransportMode, string> = {
   walk: 'Walk',
   transit: 'Public Transit',
+  bullet_train: 'Bullet Train',
   drive: 'Car / Taxi',
+  flight: 'Flight',
 }
 
 export default function TripWorkspacePage() {
@@ -96,10 +109,6 @@ export default function TripWorkspacePage() {
   const { records: stopRows } = useQuery<StopData>('trip_stops', {
     where: { tripId: tripId || '__none__' },
   })
-  const { records: overviewRows } = useQuery<OverviewData>('trip_overviews', {
-    where: { tripId: tripId || '__none__' },
-    limit: 1,
-  })
   const { records: checklistRows } = useQuery<ChecklistData>('trip_checklists', {
     where: { tripId: tripId || '__none__' },
   })
@@ -107,11 +116,8 @@ export default function TripWorkspacePage() {
     where: { teamId: tripId || '__none__', status: 'active' },
   })
 
-  const { peers } = usePresenceRoom(tripId ? `trip:${tripId}` : 'trip:none')
-
   const tripRecord = tripRows[0] ?? null
   const trip = tripRecord?.data ?? null
-  const overview = overviewRows[0]?.data ?? null
 
   const destinations = useMemo(
     () =>
@@ -149,7 +155,7 @@ export default function TripWorkspacePage() {
   const canEdit = callerRole === 'owner' || callerRole === 'editor'
   const isOwner = callerRole === 'owner'
 
-  const [activeTab, setActiveTab] = useState<'itinerary' | 'overview' | 'discover' | 'budget'>(
+  const [activeTab, setActiveTab] = useState<'itinerary' | 'discover' | 'budget'>(
     'itinerary',
   )
   const [tabInitialized, setTabInitialized] = useState(false)
@@ -160,6 +166,8 @@ export default function TripWorkspacePage() {
   const [deleting, setDeleting] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [savingEdit, setSavingEdit] = useState(false)
+  const [regenerateConfirmOpen, setRegenerateConfirmOpen] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
   const [editTitle, setEditTitle] = useState('')
   const [editDescription, setEditDescription] = useState('')
   const [editStartDate, setEditStartDate] = useState('')
@@ -170,12 +178,32 @@ export default function TripWorkspacePage() {
   const [editBudget, setEditBudget] = useState<BudgetTier>('moderate')
   const [editTransport, setEditTransport] = useState<TransportMode>('transit')
   const [acceptingInvite, setAcceptingInvite] = useState(false)
-  const [weatherLoadingId, setWeatherLoadingId] = useState<string | null>(null)
+  const [mobileView, setMobileView] = useState<'schedule' | 'map'>('schedule')
+  const [manageStaysOpen, setManageStaysOpen] = useState(false)
+  const [stayEditOpen, setStayEditOpen] = useState(false)
+  const [editingDestId, setEditingDestId] = useState<string>('')
+  const [stayDestName, setStayDestName] = useState('')
+  const [stayDestCountry, setStayDestCountry] = useState('')
+  const [stayLodgingName, setStayLodgingName] = useState('')
+  const [stayLodgingAddress, setStayLodgingAddress] = useState('')
+  const [stayCheckIn, setStayCheckIn] = useState('15:00')
+  const [stayCheckOut, setStayCheckOut] = useState('10:00')
+  const [stayArrive, setStayArrive] = useState('')
+  const [stayDepart, setStayDepart] = useState('')
+  const [savingStay, setSavingStay] = useState(false)
+  const [nowTick, setNowTick] = useState(() => Date.now())
+  const activeDayInitRef = useRef(false)
+  const weatherFetchedIdsRef = useRef<Set<string>>(new Set())
   const [showAuthModal, setShowAuthModal] = useState(false)
 
   useEffect(() => {
+    const id = window.setInterval(() => setNowTick(Date.now()), 60_000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  useEffect(() => {
     if (trip && !tabInitialized) {
-      setActiveTab(trip.mode === 'overview' ? 'overview' : 'itinerary')
+      setActiveTab('itinerary')
       setTabInitialized(true)
     }
   }, [trip, tabInitialized])
@@ -208,6 +236,103 @@ export default function TripWorkspacePage() {
     [stops, activeDay],
   )
 
+  const activeDayHotels = useMemo(
+    () => resolveActiveDayHotels(activeDay, totalDays, trip?.startDate, destinations),
+    [activeDay, totalDays, trip?.startDate, destinations],
+  )
+
+  const liveClock = useMemo(() => {
+    const d = new Date(nowTick)
+    const yyyy = d.getFullYear()
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    return {
+      todayIso: `${yyyy}-${mm}-${dd}`,
+      nowMinutes: d.getHours() * 60 + d.getMinutes(),
+    }
+  }, [nowTick])
+
+  const effectiveStartDate = useMemo(
+    () => resolveEffectiveTripStartDate(trip?.startDate, destinations),
+    [trip?.startDate, destinations],
+  )
+
+  const currentTripDayNumber = useMemo(() => {
+    if (!effectiveStartDate) return null
+    const dayIdx = diffDaysInclusive(effectiveStartDate, liveClock.todayIso)
+    if (liveClock.todayIso < effectiveStartDate || dayIdx < 1 || dayIdx > totalDays) return null
+    return dayIdx
+  }, [effectiveStartDate, liveClock.todayIso, totalDays])
+
+  const isTripInProgress = currentTripDayNumber !== null
+
+  useEffect(() => {
+    if (isTripInProgress && currentTripDayNumber && !activeDayInitRef.current) {
+      activeDayInitRef.current = true
+      setActiveDay(currentTripDayNumber)
+    }
+  }, [isTripInProgress, currentTripDayNumber])
+
+  const todayContext = useMemo(
+    () =>
+      currentTripDayNumber
+        ? resolveDayContext(currentTripDayNumber, totalDays, effectiveStartDate, destinations)
+        : null,
+    [currentTripDayNumber, totalDays, effectiveStartDate, destinations],
+  )
+
+  const todayVisitedDestinations = useMemo(() => {
+    if (!todayContext) return []
+    const list: Array<DestinationData & { id: string }> = []
+    if (
+      todayContext.previousDestination?.id &&
+      todayContext.isLocationChange
+    ) {
+      list.push(todayContext.previousDestination as DestinationData & { id: string })
+    }
+    if (
+      todayContext.destination?.id &&
+      !list.some((d) => d.id === todayContext.destination?.id)
+    ) {
+      list.push(todayContext.destination as DestinationData & { id: string })
+    }
+    return list
+  }, [todayContext])
+
+  // Auto-load live weather strictly when the trip is actively underway for locations visited today
+  useEffect(() => {
+    if (!isTripInProgress || !tripId || todayVisitedDestinations.length === 0) return
+    for (const dest of todayVisitedDestinations) {
+      if (weatherFetchedIdsRef.current.has(dest.id)) continue
+      const fetchedAt = dest.weatherCache?.fetchedAt
+        ? Date.parse(dest.weatherCache.fetchedAt)
+        : 0
+      const fresh = Number.isFinite(fetchedAt) && Date.now() - fetchedAt < 3 * 3600 * 1000
+      if (!fresh) {
+        weatherFetchedIdsRef.current.add(dest.id)
+        void callTripAction('refreshDestinationWeather', {
+          tripId,
+          destinationId: dest.id,
+        }).catch(() => undefined)
+      }
+    }
+  }, [isTripInProgress, tripId, todayVisitedDestinations])
+
+  const todaySchedule = useMemo(() => {
+    if (!currentTripDayNumber || !todayContext) return null
+    const rawTodayStops = stops.filter((s) => s.dayNumber === currentTripDayNumber)
+    const originDest = todayContext.isLocationChange
+      ? todayContext.previousDestination ?? todayContext.destination
+      : todayContext.destination
+    const originLat = originDest?.lodgingLat ?? originDest?.lat
+    const originLng = originDest?.lodgingLng ?? originDest?.lng
+    const hotelOrigin =
+      typeof originLat === 'number' && typeof originLng === 'number'
+        ? { name: originDest?.lodgingName || originDest?.name, lat: originLat, lng: originLng }
+        : undefined
+    return computeDaySchedule(rawTodayStops, 9 * 60, hotelOrigin)
+  }, [currentTripDayNumber, todayContext, stops])
+
   async function handleAcceptInvite() {
     if (!inviteToken) return
     setAcceptingInvite(true)
@@ -224,15 +349,42 @@ export default function TripWorkspacePage() {
     }
   }
 
-  async function handleRefreshWeather(destinationId: string) {
-    setWeatherLoadingId(destinationId)
+  function openStayEditor(dest: DestinationData & { id: string }) {
+    setEditingDestId(dest.id)
+    setStayDestName(dest.name ?? '')
+    setStayDestCountry(dest.country ?? '')
+    setStayLodgingName(dest.lodgingName ?? '')
+    setStayLodgingAddress(dest.lodgingAddress ?? '')
+    setStayCheckIn(dest.checkInTime ?? '15:00')
+    setStayCheckOut(dest.checkOutTime ?? '10:00')
+    setStayArrive(dest.arrivalDate ?? '')
+    setStayDepart(dest.departureDate ?? '')
+    setStayEditOpen(true)
+  }
+
+  async function handleSaveStay() {
+    if (!editingDestId) return
+    setSavingStay(true)
     try {
-      await callTripAction('refreshDestinationWeather', { tripId, destinationId })
-      success('Weather updated', 'Loaded current conditions and 5-day forecast.')
+      await callTripAction('updateDestination', {
+        tripId,
+        destinationId: editingDestId,
+        name: stayDestName,
+        country: stayDestCountry,
+        refreshGeocode: true,
+        lodgingName: stayLodgingName,
+        lodgingAddress: stayLodgingAddress,
+        checkInTime: stayCheckIn,
+        checkOutTime: stayCheckOut,
+        arrivalDate: stayArrive,
+        departureDate: stayDepart,
+      })
+      setStayEditOpen(false)
+      success('Stay updated', 'Saved hotel location, check-in/out times, and dates.')
     } catch (err) {
-      error('Weather lookup failed', err instanceof Error ? err.message : 'Failed')
+      error('Could not save stay', err instanceof Error ? err.message : 'Failed')
     } finally {
-      setWeatherLoadingId(null)
+      setSavingStay(false)
     }
   }
 
@@ -291,9 +443,35 @@ export default function TripWorkspacePage() {
     }
   }
 
+  async function handleRegenerateTrip() {
+    setRegenerating(true)
+    try {
+      await callTripAction('regenerateTrip', {
+        tripId,
+        ...(editTitle.trim() ? { title: editTitle.trim() } : {}),
+        summaryNotes: editDescription.trim(),
+        startDate: editStartDate || '',
+        endDate: editEndDate || '',
+        totalDays: Math.max(1, Number(editTotalDays) || 5),
+        travelers: Math.max(1, Number(editTravelers) || 2),
+        pace: editPace,
+        budgetTier: editBudget,
+        transportPreference: editTransport,
+      })
+      setRegenerateConfirmOpen(false)
+      setEditOpen(false)
+      setActiveDay(1)
+      success('Trip regenerated', 'Rebuilt destination transit legs and seeded lodging/travel stops from scratch.')
+    } catch (err) {
+      error('Could not regenerate trip', err instanceof Error ? err.message : 'Failed')
+    } finally {
+      setRegenerating(false)
+    }
+  }
+
   function handleExportMarkdown() {
     if (!trip) return
-    const md = itineraryToMarkdown({ trip, destinations, stops, overview })
+    const md = itineraryToMarkdown({ trip, destinations, stops })
     const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -369,33 +547,39 @@ export default function TripWorkspacePage() {
   }
 
   return (
-    <div className="min-h-full px-5 py-6 text-foreground md:px-8" data-testid="trip-workspace">
+    <div className="min-h-full px-4 py-4 text-foreground sm:px-6 md:px-8 md:py-6" data-testid="trip-workspace">
       <div className="mx-auto max-w-7xl space-y-5">
-        {/* Trip Header */}
-        <header className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-5">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={trip.mode === 'overview' ? 'secondary' : 'default'}>
-                {trip.mode === 'overview' ? 'Overview Mode' : 'Detailed Itinerary'}
-              </Badge>
-              <Badge variant="outline" data-testid="trip-role-badge">
+        {/* Trip Header — clean editorial hierarchy without pill clutter */}
+        <header className="flex flex-col gap-4 border-b border-border pb-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground">
+              <span className="font-semibold text-primary">Trip Itinerary</span>
+              <span>·</span>
+              <span className="font-medium text-foreground" data-testid="trip-role-badge">
                 {callerRole === 'owner'
                   ? 'Owner'
                   : callerRole === 'editor'
                     ? 'Editor'
                     : 'Viewer (Read-only)'}
-              </Badge>
+              </span>
               {trip.startDate && trip.endDate && (
-                <span className="font-mono text-xs text-muted-foreground">
-                  {trip.startDate} → {trip.endDate}
-                </span>
+                <>
+                  <span>·</span>
+                  <span className="font-mono">
+                    {trip.startDate} → {trip.endDate}
+                  </span>
+                </>
               )}
-              <span className="font-mono text-xs text-muted-foreground">
-                · {totalDays} days · {trip.pace ?? 'balanced'}
+              <span>·</span>
+              <span>
+                {totalDays} days · {trip.pace ?? 'balanced'}
               </span>
             </div>
 
-            <h1 className="mt-2 text-2xl font-bold tracking-tight text-foreground md:text-3xl" data-testid="trip-title">
+            <h1
+              className="font-editorial-display mt-2 text-3xl font-medium tracking-tight text-foreground md:text-4xl"
+              data-testid="trip-title"
+            >
               {trip.title}
             </h1>
             {trip.summaryNotes ? (
@@ -414,21 +598,7 @@ export default function TripWorkspacePage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {peers.length > 0 && (
-              <div className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs">
-                <Users className="size-3.5 text-success" aria-hidden />
-                <div className="flex -space-x-1.5">
-                  {peers.slice(0, 4).map((p) => (
-                    <Avatar key={p.userId} className="size-5 ring-1 ring-background">
-                      <AvatarFallback className="text-[9px]">
-                        {(p.userName?.[0] ?? 'T').toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                  ))}
-                </div>
-                <span className="text-muted-foreground">{peers.length} online</span>
-              </div>
-            )}
+            {callerRole && tripId ? <TripLivePresence tripId={tripId} /> : null}
 
             {canEdit && (
               <Button
@@ -488,9 +658,9 @@ export default function TripWorkspacePage() {
         {!canEdit && (
           <div
             data-testid="viewer-readonly-banner"
-            className="flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-xs text-muted-foreground"
+            className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-xs text-muted-foreground"
           >
-            <Lock className="size-3.5 text-primary" aria-hidden />
+            <Lock className="size-3.5 shrink-0 text-primary" aria-hidden />
             <span>
               You have <strong className="text-foreground">view-only</strong> access to this
               itinerary. Ask the owner to grant Editor permissions if you want to make changes.
@@ -498,77 +668,204 @@ export default function TripWorkspacePage() {
           </div>
         )}
 
-        {/* Destinations & Live Weather Strip */}
-        {destinations.length > 0 && (
-          <div className="flex flex-wrap gap-2.5">
-            {destinations.map((dest) => (
-              <div
-                key={dest.id}
-                className="flex items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-2 text-xs"
-              >
-                <MapPin className="size-3.5 text-primary" aria-hidden />
-                <div>
-                  <span className="font-semibold text-foreground">
-                    {dest.name}
+        {/* Active-Trip Live Today Agenda & Weather for Locations Visited Today */}
+        {isTripInProgress && currentTripDayNumber && todaySchedule && (
+          <section
+            data-testid="live-today-panel"
+            className="rounded-xl border border-primary/45 bg-card p-4 sm:p-5"
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold text-primary">
+                  Trip in Progress · {formatIsoDateLabel(liveClock.todayIso, 'full')}
+                </p>
+                <h2 className="font-editorial-display mt-0.5 text-2xl font-medium text-foreground">
+                  Today{todayContext?.destination ? ` in ${todayContext.destination.name}` : ''}
+                </h2>
+              </div>
+
+              {todayVisitedDestinations.some((d) => d.weatherCache) && (
+                <div className="flex flex-wrap gap-4 border-t border-border pt-2 text-xs sm:border-t-0 sm:pt-0">
+                  {todayVisitedDestinations.map(
+                    (dest) =>
+                      dest.weatherCache && (
+                        <div key={dest.id} className="flex items-center gap-2 text-foreground">
+                          <CloudSun className="size-4 text-primary" aria-hidden />
+                          <span>
+                            <strong>{dest.name}:</strong> {dest.weatherCache.tempC}°C{' '}
+                            <span className="text-muted-foreground">
+                              {dest.weatherCache.description}
+                            </span>
+                          </span>
+                        </div>
+                      ),
+                  )}
+                </div>
+              )}
+            </div>
+
+            {(() => {
+              const items = todaySchedule.items
+              const activeItem = items.find(
+                (i) => i.startMinutes <= liveClock.nowMinutes && liveClock.nowMinutes <= i.endMinutes,
+              )
+              const nextItem = items.find((i) => i.startMinutes > liveClock.nowMinutes)
+              const completedCount = items.filter((i) => i.endMinutes < liveClock.nowMinutes).length
+
+              return (
+                <div className="mt-3 grid gap-3 border-t border-border pt-3 text-xs sm:grid-cols-3">
+                  <div>
+                    <span className="text-muted-foreground">Happening now</span>
+                    <p className="mt-0.5 font-medium text-foreground">
+                      {activeItem
+                        ? `${activeItem.startTime}–${activeItem.endTime} · ${activeItem.stop.title}`
+                        : nextItem
+                          ? 'Between stops / free window'
+                          : 'Day complete'}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Up next</span>
+                    <p className="mt-0.5 font-medium text-foreground">
+                      {nextItem
+                        ? `${nextItem.startTime} · ${nextItem.stop.title}`
+                        : 'No remaining stops today'}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between sm:block">
+                    <div>
+                      <span className="text-muted-foreground">Day progress</span>
+                      <p className="mt-0.5 font-medium text-foreground">
+                        {completedCount} of {items.length} stops finished
+                      </p>
+                    </div>
+                    {activeDay !== currentTripDayNumber && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="mt-1 sm:mt-2"
+                        onClick={() => setActiveDay(currentTripDayNumber)}
+                      >
+                        Jump to Today
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
+          </section>
+        )}
+
+        {/* Destinations & Stays Summary + Hotels Menu */}
+        {(destinations.length > 0 || canEdit) && (
+          <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-2 border-b border-border pb-3 text-xs">
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+              {destinations.map((dest, idx) => (
+                <div key={dest.id} className="flex flex-wrap items-center gap-2 text-muted-foreground">
+                  <MapPin className="size-3.5 shrink-0 text-primary" aria-hidden />
+                  <span className="font-medium text-foreground">
+                    {idx + 1}. {dest.name}
                     {dest.country ? `, ${dest.country}` : ''}
                   </span>
                   {dest.arrivalDate && dest.departureDate && (
-                    <span className="ml-2 font-mono text-[11px] text-muted-foreground">
-                      {dest.arrivalDate} – {dest.departureDate}
+                    <span className="font-mono text-[11px]">
+                      ({dest.arrivalDate} – {dest.departureDate})
                     </span>
                   )}
-                  {dest.weatherCache && (
-                    <span className="ml-2 inline-flex items-center gap-1 text-primary">
-                      <CloudSun className="size-3" aria-hidden />
-                      {dest.weatherCache.tempC}°C {dest.weatherCache.description}
+                  {idx > 0 && dest.transportFromPrev && dest.transportFromPrev !== 'none' && (
+                    <span className="font-mono text-[11px] text-primary">
+                      via {INTERCITY_TRANSPORT_LABELS[dest.transportFromPrev] ?? dest.transportFromPrev}
+                      {typeof dest.transitHoursFromPrev === 'number' && dest.transitHoursFromPrev > 0
+                        ? ` (~${dest.transitHoursFromPrev}h)`
+                        : ''}
                     </span>
+                  )}
+                  {dest.lodgingName && (
+                    <span className="inline-flex items-center gap-1 text-muted-foreground">
+                      <BedDouble className="size-3 text-primary" aria-hidden />
+                      {dest.lodgingName} ({dest.checkInTime || '15:00'}/{dest.checkOutTime || '10:00'})
+                    </span>
+                  )}
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => openStayEditor(dest)}
+                      className="text-[11px] font-medium text-primary hover:underline"
+                    >
+                      {dest.lodgingName ? 'Edit stay' : '+ Add hotel'}
+                    </button>
                   )}
                 </div>
-                <button
-                  type="button"
-                  title="Refresh live weather"
-                  aria-label={`Refresh weather for ${dest.name}`}
-                  disabled={weatherLoadingId === dest.id}
-                  onClick={() => void handleRefreshWeather(dest.id)}
-                  className="ml-1 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
-                >
-                  <RefreshCw
-                    className={`size-3 ${weatherLoadingId === dest.id ? 'animate-spin' : ''}`}
-                    aria-hidden
-                  />
-                </button>
-              </div>
-            ))}
+              ))}
+              {destinations.length === 0 && (
+                <span className="text-muted-foreground">No hotels or cities added yet.</span>
+              )}
+            </div>
+
+            {canEdit && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setManageStaysOpen(true)}
+                data-testid="manage-stays-button"
+              >
+                <BedDouble className="size-3.5 text-primary" aria-hidden />
+                Hotels &amp; Stays
+              </Button>
+            )}
           </div>
         )}
 
         {/* Workspace Tabs */}
         <Tabs
           value={activeTab}
-          onValueChange={(v) =>
-            setActiveTab(v as 'itinerary' | 'overview' | 'discover' | 'budget')
-          }
+          onValueChange={(v) => setActiveTab(v as 'itinerary' | 'discover' | 'budget')}
         >
           <TabsList>
             <TabsTrigger value="itinerary">Daily Itinerary &amp; Map</TabsTrigger>
-            <TabsTrigger value="overview">Broad Overview &amp; Pacing</TabsTrigger>
             <TabsTrigger value="discover">Discover &amp; Photo Spots</TabsTrigger>
             <TabsTrigger value="budget">Budget &amp; Checklist</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="itinerary" className="mt-5">
-            <div className="grid gap-6 lg:grid-cols-12">
-              <div className="lg:col-span-7">
+          <TabsContent value="itinerary" className="@container mt-5">
+            {/* Mobile Schedule / Map toggle */}
+            <div className="mb-3 flex gap-2 lg:hidden">
+              <Button
+                size="sm"
+                variant={mobileView === 'schedule' ? 'default' : 'outline'}
+                className="flex-1"
+                onClick={() => setMobileView('schedule')}
+              >
+                <Clock className="size-3.5" aria-hidden />
+                Timeline
+              </Button>
+              <Button
+                size="sm"
+                variant={mobileView === 'map' ? 'default' : 'outline'}
+                className="flex-1"
+                onClick={() => setMobileView('map')}
+              >
+                <MapPin className="size-3.5" aria-hidden />
+                Map ({dayStops.length})
+              </Button>
+            </div>
+
+            <div className="grid gap-6 @min-[840px]:grid-cols-12">
+              <div className={`${mobileView === 'map' ? 'hidden lg:block' : ''} @min-[840px]:col-span-5`}>
                 <ItineraryTimeline
                   tripId={tripId}
                   dayNumber={activeDay}
                   totalDays={totalDays}
+                  tripStartDate={effectiveStartDate}
+                  destinations={destinations}
                   onSelectDay={setActiveDay}
                   stops={stops}
                   canEdit={canEdit}
                   currency={trip.currency ?? 'USD'}
                   selectedStopId={selectedStopId}
                   onSelectStop={setSelectedStopId}
+                  liveNowMinutes={liveClock.nowMinutes}
+                  isActiveToday={Boolean(isTripInProgress && activeDay === currentTripDayNumber)}
                   onOptimizeDay={(d) => callTripAction('optimizeTripDay', { tripId, dayNumber: d })}
                   onSaveStop={(payload) =>
                     callTripAction('upsertTripStop', { tripId, ...payload }).then(() => undefined)
@@ -585,46 +882,20 @@ export default function TripWorkspacePage() {
                 />
               </div>
 
-              <div className="lg:col-span-5">
-                <div className="sticky top-6">
+              <div className={`${mobileView === 'schedule' ? 'hidden lg:block' : ''} @min-[840px]:col-span-7`}>
+                <div className="@min-[840px]:sticky @min-[840px]:top-4">
                   <AtlasMap
                     stops={dayStops}
                     destinations={destinations}
+                    startHotel={activeDayHotels.startHotel}
+                    endHotel={activeDayHotels.endHotel}
                     selectedStopId={selectedStopId}
                     onSelectStop={setSelectedStopId}
-                    className="h-[460px]"
+                    className="h-[calc(100dvh-210px)] min-h-[440px] sm:h-[520px] @min-[840px]:h-[calc(100dvh-135px)] @min-[840px]:min-h-[620px]"
                   />
                 </div>
               </div>
             </div>
-          </TabsContent>
-
-          <TabsContent value="overview" className="mt-5">
-            <OverviewPlannerView
-              tripId={tripId}
-              totalDays={totalDays}
-              destinations={destinations}
-              overview={overview}
-              canEdit={canEdit}
-              onAddDestination={(name, country) =>
-                callTripAction('addDestination', { tripId, name, country }).then(() => undefined)
-              }
-              onRemoveDestination={(destinationId) =>
-                callTripAction('removeDestination', { tripId, destinationId }).then(() => undefined)
-              }
-              onGenerateOverview={(days, useAi) =>
-                callTripAction('generateOverviewBlueprint', {
-                  tripId,
-                  totalDays: days,
-                  useAi,
-                }).then(() => undefined)
-              }
-              onPromoteToDetailed={async (startDate) => {
-                await callTripAction('promoteOverviewToDetailed', { tripId, startDate })
-                setActiveTab('itinerary')
-              }}
-              onAskAi={(prompt) => tripChat?.queuePrompt(prompt)}
-            />
           </TabsContent>
 
           <TabsContent value="discover" className="mt-5">
@@ -720,7 +991,17 @@ export default function TripWorkspacePage() {
                   id="edit-start-date"
                   type="date"
                   value={editStartDate}
-                  onChange={(e) => setEditStartDate(e.target.value)}
+                  onChange={(e) => {
+                    const nextStart = e.target.value
+                    setEditStartDate(nextStart)
+                    if (nextStart && editEndDate) {
+                      const d = diffDaysInclusive(nextStart, editEndDate)
+                      if (d > 0) setEditTotalDays(String(Math.min(60, d)))
+                    } else if (nextStart && editTotalDays) {
+                      const n = Math.max(1, Math.min(60, Number(editTotalDays) || 1))
+                      setEditEndDate(isoAddDays(nextStart, n - 1))
+                    }
+                  }}
                 />
               </div>
               <div>
@@ -729,7 +1010,14 @@ export default function TripWorkspacePage() {
                   id="edit-end-date"
                   type="date"
                   value={editEndDate}
-                  onChange={(e) => setEditEndDate(e.target.value)}
+                  onChange={(e) => {
+                    const nextEnd = e.target.value
+                    setEditEndDate(nextEnd)
+                    if (editStartDate && nextEnd) {
+                      const d = diffDaysInclusive(editStartDate, nextEnd)
+                      if (d > 0) setEditTotalDays(String(Math.min(60, d)))
+                    }
+                  }}
                 />
               </div>
             </div>
@@ -743,7 +1031,14 @@ export default function TripWorkspacePage() {
                   min={1}
                   max={60}
                   value={editTotalDays}
-                  onChange={(e) => setEditTotalDays(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setEditTotalDays(val)
+                    const n = Number(val)
+                    if (editStartDate && Number.isFinite(n) && n >= 1) {
+                      setEditEndDate(isoAddDays(editStartDate, Math.min(60, Math.round(n)) - 1))
+                    }
+                  }}
                 />
               </div>
               <div>
@@ -819,16 +1114,185 @@ export default function TripWorkspacePage() {
               </div>
             </div>
           </Modal.Body>
+          <Modal.Footer className="flex-wrap justify-between gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setRegenerateConfirmOpen(true)}
+              data-testid="regenerate-trip-btn"
+            >
+              <RotateCcw className="size-3.5" aria-hidden />
+              Regenerate Trip
+            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => setEditOpen(false)}>
+                Cancel
+              </Button>
+              <Button loading={savingEdit} onClick={handleSaveTripDetails} data-testid="save-trip-details-btn">
+                Save Changes
+              </Button>
+            </div>
+          </Modal.Footer>
+        </Modal>
+      )}
+
+      {canEdit && (
+        <ConfirmModal
+          open={regenerateConfirmOpen}
+          onClose={() => setRegenerateConfirmOpen(false)}
+          onConfirm={handleRegenerateTrip}
+          loading={regenerating}
+          variant="destructive"
+          title="Regenerate trip as if just created?"
+          description="This clears all current scheduled stops and rebuilds your destination transit estimates and hotel check-in, check-out, and travel cards using these trip settings."
+          confirmText="Regenerate Trip"
+        />
+      )}
+
+      {canEdit && (
+        <Modal open={stayEditOpen} onClose={() => setStayEditOpen(false)}>
+          <Modal.Header>
+            <h3 className="text-base font-semibold text-foreground">Edit Destination Stay &amp; Lodging</h3>
+          </Modal.Header>
+          <Modal.Body className="space-y-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="sm:col-span-2">
+                <Label htmlFor="stay-dest-name">City / Destination</Label>
+                <Input
+                  id="stay-dest-name"
+                  value={stayDestName}
+                  onChange={(e) => setStayDestName(e.target.value)}
+                  placeholder="e.g. Osaka"
+                />
+              </div>
+              <div>
+                <Label htmlFor="stay-dest-country">Country</Label>
+                <Input
+                  id="stay-dest-country"
+                  value={stayDestCountry}
+                  onChange={(e) => setStayDestCountry(e.target.value)}
+                  placeholder="e.g. Japan or JP"
+                />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="stay-lodging-name">Hotel / Lodging name</Label>
+              <Input
+                id="stay-lodging-name"
+                value={stayLodgingName}
+                onChange={(e) => setStayLodgingName(e.target.value)}
+                placeholder="e.g. Hotel Gracery Kyoto"
+              />
+            </div>
+            <div>
+              <Label htmlFor="stay-lodging-addr">Address or neighborhood (used for travel estimates)</Label>
+              <Input
+                id="stay-lodging-addr"
+                value={stayLodgingAddress}
+                onChange={(e) => setStayLodgingAddress(e.target.value)}
+                placeholder="Street or district"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="stay-checkin">Check-in time</Label>
+                <Input
+                  id="stay-checkin"
+                  type="time"
+                  value={stayCheckIn}
+                  onChange={(e) => setStayCheckIn(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="stay-checkout">Check-out time</Label>
+                <Input
+                  id="stay-checkout"
+                  type="time"
+                  value={stayCheckOut}
+                  onChange={(e) => setStayCheckOut(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="stay-arrive">Arrival date</Label>
+                <Input
+                  id="stay-arrive"
+                  type="date"
+                  value={stayArrive}
+                  onChange={(e) => setStayArrive(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="stay-depart">Departure date</Label>
+                <Input
+                  id="stay-depart"
+                  type="date"
+                  value={stayDepart}
+                  onChange={(e) => setStayDepart(e.target.value)}
+                />
+              </div>
+            </div>
+          </Modal.Body>
           <Modal.Footer>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>
+            <Button variant="outline" onClick={() => setStayEditOpen(false)}>
               Cancel
             </Button>
-            <Button loading={savingEdit} onClick={handleSaveTripDetails} data-testid="save-trip-details-btn">
-              Save Changes
+            <Button loading={savingStay} onClick={handleSaveStay}>
+              Save Stay
             </Button>
           </Modal.Footer>
         </Modal>
       )}
+
+      {canEdit && (
+        <ManageStaysModal
+          open={manageStaysOpen}
+          onClose={() => setManageStaysOpen(false)}
+          destinations={destinations}
+          onAddStay={(payload) =>
+            callTripAction('addDestination', { tripId, ...payload }).then(() => undefined)
+          }
+          onEditStay={openStayEditor}
+          onChangeTransit={(destinationId, mode) =>
+            callTripAction('updateDestination', {
+              tripId,
+              destinationId,
+              transportFromPrev: mode,
+            }).then(() => undefined)
+          }
+          onClearHotel={(destinationId) =>
+            callTripAction('updateDestination', {
+              tripId,
+              destinationId,
+              clearLodging: true,
+            }).then(() => undefined)
+          }
+          onRemoveStay={(destinationId) =>
+            callTripAction('removeDestination', { tripId, destinationId }).then(() => undefined)
+          }
+        />
+      )}
+    </div>
+  )
+}
+
+function TripLivePresence({ tripId }: { tripId: string }) {
+  const { peers } = usePresenceRoom(`trip:${tripId}`)
+  if (peers.length === 0) return null
+  return (
+    <div className="flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs">
+      <Users className="size-3.5 text-success" aria-hidden />
+      <div className="flex -space-x-1.5">
+        {peers.slice(0, 4).map((p) => (
+          <Avatar key={p.userId} className="size-5 ring-1 ring-background">
+            <AvatarFallback className="text-[9px]">
+              {(p.userName?.[0] ?? 'T').toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+        ))}
+      </div>
+      <span className="text-muted-foreground">{peers.length} online</span>
     </div>
   )
 }

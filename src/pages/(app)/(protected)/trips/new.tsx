@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, Compass, MapPin, Plus, Trash2 } from 'lucide-react'
+import { ArrowRight, Plus, Trash2 } from 'lucide-react'
 import {
   Button,
   Input,
@@ -14,11 +14,11 @@ import {
   useToast,
 } from '@/components/ui'
 import { callTripAction } from '@/lib/actions-client'
+import { diffDaysInclusive } from '@/lib/route-optimizer'
 import type {
   BudgetTier,
   IntercityTransport,
   TransportMode,
-  TripMode,
   TripPace,
 } from '@/lib/trip-types'
 
@@ -28,7 +28,11 @@ interface DestDraft {
   country: string
   arrivalDate: string
   departureDate: string
-  transportFromPrev: IntercityTransport
+  lodgingName: string
+  lodgingAddress: string
+  checkInTime: string
+  checkOutTime: string
+  transportFromPrev: IntercityTransport | 'auto'
 }
 
 const PACE_ITEMS: Record<TripPace, string> = {
@@ -43,7 +47,7 @@ const BUDGET_ITEMS: Record<BudgetTier, string> = {
   luxury: 'Luxury',
 }
 
-const TRANSPORT_ITEMS: Record<TransportMode, string> = {
+const TRANSPORT_ITEMS: Record<'walk' | 'transit' | 'drive', string> = {
   walk: 'Mostly Walking',
   transit: 'Public Transit + Walk',
   drive: 'Car / Taxi',
@@ -64,7 +68,6 @@ export default function NewTripPage() {
   const navigate = useNavigate()
   const { success, error } = useToast()
 
-  const [mode, setMode] = useState<TripMode>('detailed')
   const [title, setTitle] = useState('')
   const [totalDays, setTotalDays] = useState('7')
   const [travelers, setTravelers] = useState('2')
@@ -80,6 +83,10 @@ export default function NewTripPage() {
       country: '',
       arrivalDate: '',
       departureDate: '',
+      lodgingName: '',
+      lodgingAddress: '',
+      checkInTime: '15:00',
+      checkOutTime: '10:00',
       transportFromPrev: 'none',
     },
   ])
@@ -101,13 +108,31 @@ export default function NewTripPage() {
         country: '',
         arrivalDate: '',
         departureDate: '',
-        transportFromPrev: 'train',
+        lodgingName: '',
+        lodgingAddress: '',
+        checkInTime: '15:00',
+        checkOutTime: '10:00',
+        transportFromPrev: 'auto',
       },
     ])
   }
 
   function updateDest(id: string, patch: Partial<DestDraft>) {
-    setDestinations((prev) => prev.map((d) => (d.id === id ? { ...d, ...patch } : d)))
+    setDestinations((prev) => {
+      const next = prev.map((d) => (d.id === id ? { ...d, ...patch } : d))
+      if (patch.arrivalDate !== undefined || patch.departureDate !== undefined) {
+        const firstArr = next.find((d) => d.arrivalDate)?.arrivalDate
+        const lastDep = next
+          .slice()
+          .reverse()
+          .find((d) => d.departureDate)?.departureDate
+        const days = diffDaysInclusive(firstArr, lastDep)
+        if (days > 0) {
+          setTotalDays(String(Math.min(60, days)))
+        }
+      }
+      return next
+    })
   }
 
   function removeDest(id: string) {
@@ -120,22 +145,40 @@ export default function NewTripPage() {
       return
     }
     setTitleError('')
+    const parsedDays = Math.round(Number(totalDays))
+    if (!Number.isFinite(parsedDays) || parsedDays < 1 || parsedDays > 60) {
+      error('Invalid trip length', 'Total days must be between 1 and 60.')
+      return
+    }
     const validDests = destinations.filter((d) => d.name.trim().length > 0)
+    for (const d of validDests) {
+      if (d.arrivalDate && d.departureDate && d.departureDate < d.arrivalDate) {
+        error(
+          'Invalid destination dates',
+          `${d.name.trim()}: departure date cannot be earlier than arrival date.`,
+        )
+        return
+      }
+    }
     const firstArrival = validDests.find((d) => d.arrivalDate)?.arrivalDate
     const lastDeparture = validDests
       .slice()
       .reverse()
       .find((d) => d.departureDate)?.departureDate
+    if (firstArrival && lastDeparture && lastDeparture < firstArrival) {
+      error('Invalid trip dates', 'Final departure date cannot precede your first arrival date.')
+      return
+    }
 
     setSubmitting(true)
     try {
       const res = await callTripAction<{ tripId: string }>('createTrip', {
         title: title.trim(),
-        mode,
+        mode: 'detailed',
         startDate: firstArrival || undefined,
         endDate: lastDeparture || undefined,
-        totalDays: Math.max(1, Number(totalDays) || 7),
-        travelers: Math.max(1, Number(travelers) || 2),
+        totalDays: parsedDays,
+        travelers: Math.max(1, Math.min(30, Math.round(Number(travelers)) || 2)),
         pace,
         budgetTier,
         transportPreference,
@@ -146,7 +189,11 @@ export default function NewTripPage() {
           country: d.country.trim() || undefined,
           arrivalDate: d.arrivalDate || undefined,
           departureDate: d.departureDate || undefined,
-          transportFromPrev: d.transportFromPrev,
+          lodgingName: d.lodgingName.trim() || undefined,
+          lodgingAddress: d.lodgingAddress.trim() || undefined,
+          checkInTime: d.checkInTime || '15:00',
+          checkOutTime: d.checkOutTime || '10:00',
+          transportFromPrev: d.transportFromPrev === 'auto' ? undefined : d.transportFromPrev,
         })),
       })
       success('Trip created', `"${title.trim()}" is ready in your atlas.`)
@@ -159,55 +206,17 @@ export default function NewTripPage() {
   }
 
   return (
-    <div className="min-h-full px-5 py-6 text-foreground md:px-8 md:py-10">
+    <div className="min-h-full px-4 py-5 text-foreground sm:px-6 md:px-8 md:py-10">
       <div className="mx-auto max-w-5xl space-y-6">
         <div>
-          <p className="font-mono text-xs uppercase tracking-widest text-primary">New Atlas</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight md:text-3xl">Create a Vacation Plan</h1>
+          <p className="text-xs font-medium text-primary">New Trip</p>
+          <h1 className="font-editorial-display mt-1 text-3xl font-medium tracking-tight md:text-4xl">
+            Create a Vacation Plan
+          </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Start with fixed dates per city, or choose Broad Overview Mode to test stay durations
-            and pacing first.
+            Enter dates and where you are staying per city (10:00 checkout and 15:00 check-in are
+            used by default and editable).
           </p>
-        </div>
-
-        {/* Mode Picker */}
-        <div className="grid gap-3 sm:grid-cols-2">
-          <button
-            type="button"
-            onClick={() => setMode('detailed')}
-            className={`rounded-xl border p-4 text-left transition-colors ${
-              mode === 'detailed'
-                ? 'border-primary bg-accent/40'
-                : 'border-border bg-card hover:border-primary/40'
-            }`}
-          >
-            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              <MapPin className="size-4 text-primary" aria-hidden />
-              Detailed Itinerary Mode
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Enter cities &amp; exact dates, map daily stops, and optimize transit times.
-            </p>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setMode('overview')}
-            className={`rounded-xl border p-4 text-left transition-colors ${
-              mode === 'overview'
-                ? 'border-primary bg-accent/40'
-                : 'border-border bg-card hover:border-primary/40'
-            }`}
-          >
-            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              <Compass className="size-4 text-primary" aria-hidden />
-              Broad Overview Mode
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              List places you want to visit + total days; get suggested stay lengths &amp;
-              feasibility.
-            </p>
-          </button>
         </div>
 
         {/* Core Details */}
@@ -225,9 +234,7 @@ export default function NewTripPage() {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <Label htmlFor="trip-days">
-                {mode === 'overview' ? 'Total timeframe (days)' : 'Est. days'}
-              </Label>
+              <Label htmlFor="trip-days">Est. days</Label>
               <Input
                 id="trip-days"
                 type="number"
@@ -339,9 +346,7 @@ export default function NewTripPage() {
             <div>
               <h2 className="text-sm font-semibold text-foreground">Destinations &amp; Dates</h2>
               <p className="text-xs text-muted-foreground">
-                {mode === 'overview'
-                  ? 'Just list the cities/regions you hope to see — Trippie will suggest stay durations.'
-                  : 'Add each stop and your arrival/departure dates.'}
+                Add each stop and your arrival/departure dates.
               </p>
             </div>
             <Button size="sm" variant="outline" onClick={addDestRow}>
@@ -386,24 +391,81 @@ export default function NewTripPage() {
                   </Button>
                 </div>
 
-                {mode === 'detailed' && (
-                  <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <Label>Arrive</Label>
+                    <Input
+                      type="date"
+                      value={dest.arrivalDate}
+                      onChange={(e) => updateDest(dest.id, { arrivalDate: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label>Depart</Label>
+                    <Input
+                      type="date"
+                      value={dest.departureDate}
+                      onChange={(e) => updateDest(dest.id, { departureDate: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-12">
+                  <div className="sm:col-span-4">
+                    <Label>Staying at (Hotel / Lodging)</Label>
+                    <Input
+                      value={dest.lodgingName}
+                      onChange={(e) => updateDest(dest.id, { lodgingName: e.target.value })}
+                      placeholder="e.g. Hotel Gracery"
+                    />
+                  </div>
+                  <div className="sm:col-span-4">
+                    <Label>Hotel address or area (optional)</Label>
+                    <Input
+                      value={dest.lodgingAddress}
+                      onChange={(e) => updateDest(dest.id, { lodgingAddress: e.target.value })}
+                      placeholder="Street or neighborhood"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 sm:col-span-4">
                     <div>
-                      <Label>Arrive</Label>
+                      <Label>Check-in</Label>
                       <Input
-                        type="date"
-                        value={dest.arrivalDate}
-                        onChange={(e) => updateDest(dest.id, { arrivalDate: e.target.value })}
+                        type="time"
+                        value={dest.checkInTime}
+                        onChange={(e) => updateDest(dest.id, { checkInTime: e.target.value })}
                       />
                     </div>
                     <div>
-                      <Label>Depart</Label>
+                      <Label>Check-out</Label>
                       <Input
-                        type="date"
-                        value={dest.departureDate}
-                        onChange={(e) => updateDest(dest.id, { departureDate: e.target.value })}
+                        type="time"
+                        value={dest.checkOutTime}
+                        onChange={(e) => updateDest(dest.id, { checkOutTime: e.target.value })}
                       />
                     </div>
+                  </div>
+                </div>
+                {idx > 0 && (
+                  <div className="sm:max-w-xs">
+                    <Label>Transit from destination #{idx}</Label>
+                    <select
+                      value={dest.transportFromPrev}
+                      onChange={(e) =>
+                        updateDest(dest.id, {
+                          transportFromPrev: e.target.value as IntercityTransport | 'auto',
+                        })
+                      }
+                      className="mt-1 h-9 w-full rounded-md border border-input bg-card px-3 text-xs text-foreground"
+                    >
+                      <option value="auto">Auto (recommended for distance)</option>
+                      <option value="bullet_train">Bullet train (Shinkansen / HSR)</option>
+                      <option value="train">Regional rail / Train</option>
+                      <option value="flight">Flight</option>
+                      <option value="drive">Drive / Car</option>
+                      <option value="bus">Bus / Coach</option>
+                      <option value="ferry">Ferry</option>
+                    </select>
                   </div>
                 )}
               </div>
@@ -422,11 +484,16 @@ export default function NewTripPage() {
           </div>
         </section>
 
-        <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={() => navigate('/home')}>
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <Button variant="outline" className="w-full sm:w-auto" onClick={() => navigate('/home')}>
             Cancel
           </Button>
-          <Button loading={submitting} onClick={handleSubmit} data-testid="create-trip-submit">
+          <Button
+            loading={submitting}
+            className="w-full sm:w-auto"
+            onClick={handleSubmit}
+            data-testid="create-trip-submit"
+          >
             Create Trip
             <ArrowRight className="size-4" aria-hidden />
           </Button>
